@@ -1,9 +1,10 @@
-# providers/openai_provider.py
+# app/providers/openai_provider.py
 
-import openai
+import os
+import httpx
+from typing import Optional
 from app.utils.retry_decorator import retry
 from app.utils.file_utils import handle_error
-import errno
 
 # Attempt to import specific exceptions; fallback to generic Exception if not available
 try:
@@ -11,45 +12,54 @@ try:
     OPENAI_EXCEPTIONS = (RateLimitError, APIConnectionError, Timeout, ContentPolicyViolationError)
 except ImportError:
     # If specific exceptions are not available, use generic Exception
-    OPENAI_EXCEPTIONS = (Exception,)
+    OPENAI_EXCEPTIONS = (httpx.HTTPError, )
 
 @retry(max_retries=10, initial_wait=2, backoff_factor=2, exceptions=OPENAI_EXCEPTIONS)
-def generate_with_openai(prompt, model="gpt-4"):
+async def generate_with_openai(prompt: str, model: str = "gpt-4") -> str:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        handle_error("APIError", "OpenAI API key is not set.")
+        return "[OpenAI API key not set.]"
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+
+    data = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+
     try:
-        response = openai.ChatCompletion.create(
-            model=model,  
-            messages=[{"role": "user", "content": prompt}],
-        )
-        content = response.choices[0].message.get('content')
-        if content and content.strip():
-            return content
-        else:
+        async with httpx.AsyncClient(timeout=30) as client:
+            response = await client.post("https://api.openai.com/v1/chat/completions", headers=headers, json=data)
+
+        if response.status_code == 200:
+            response_json = response.json()
+            choices = response_json.get("choices", [])
+            if choices:
+                content = choices[0].get("message", {}).get("content", "")
+                if content.strip():
+                    return content.strip()
             handle_error("ProcessingError", "OpenAI returned no valid content.")
             raise ValueError("OpenAI returned no valid content.")
-    
-    except RateLimitError:
-        handle_error("APIError", "Rate limit exceeded. Please wait a moment before retrying.")
-        raise RateLimitError("Rate limit exceeded. Please wait a moment before retrying.")
-    
-    except APIConnectionError:
-        handle_error("APIError", "Failed to connect to OpenAI service. Please check your internet connection.")
-        raise APIConnectionError("Failed to connect to OpenAI service. Please check your internet connection.")
-    
-    except Timeout:
-        handle_error("APIError", "The request to OpenAI timed out. Retrying might help.")
-        raise Timeout("The request to OpenAI timed out. Retrying might help.")
-    
-    except ContentPolicyViolationError:
-        handle_error("APIError", "Your request was blocked by OpenAI's content policy.")
-        raise ContentPolicyViolationError("Your request was blocked by OpenAI's content policy.")
-    
+        elif response.status_code == 429:
+            handle_error("APIError", "OpenAI rate limit exceeded. Please wait before retrying.")
+            raise RateLimitError("OpenAI rate limit exceeded. Please wait before retrying.")
+        else:
+            error_message = response.json().get('error', {}).get('message', 'Unknown error')
+            handle_error("APIError", f"OpenAI Error: {response.status_code} - {error_message}")
+            raise httpx.HTTPError(f"OpenAI API error: {error_message}")
+    except OPENAI_EXCEPTIONS as e:
+        handle_error("APIError", f"Failed to connect to OpenAI service: {e}")
+        raise e  # Re-raise to trigger retry
     except OSError as e:
         if e.errno == errno.ENOSPC:
             handle_error("StorageError", "No space left on device.")
         else:
             handle_error("APIError", f"An OS error occurred with OpenAI: {e}")
         raise e  # Re-raise to trigger retry
-    
     except Exception as e:
         handle_error("APIError", f"An unexpected error occurred with OpenAI: {e}")
         raise e  # Re-raise to trigger retry

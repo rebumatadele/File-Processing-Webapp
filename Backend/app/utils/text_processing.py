@@ -24,7 +24,7 @@ def split_text_into_chunks(text: str, chunk_size: int, chunk_by: str = "words") 
         handle_error("InvalidInput", f"Invalid chunk_by value: {chunk_by}")
         raise ValueError(f"Invalid chunk_by value: {chunk_by}")
 
-def process_text_stream(
+async def process_text_stream(
     text: str,
     provider_choice: str,
     prompt: str,
@@ -42,11 +42,11 @@ def process_text_stream(
         for chunk in split_text_into_chunks(text, chunk_size, chunk_by):
             try:
                 if provider_choice == "OpenAI":
-                    response = generate_with_openai(prompt + chunk, model=model_choice)
+                    response = await generate_with_openai(prompt + chunk, model=model_choice)
                 elif provider_choice == "Anthropic":
-                    response = generate_with_anthropic(prompt + chunk, api_key=api_keys.get("ANTHROPIC_API_KEY", ""))
+                    response = await generate_with_anthropic(prompt + chunk, api_key=api_keys.get("ANTHROPIC_API_KEY", ""))
                 elif provider_choice == "Gemini":
-                    response = generate_with_gemini(prompt + chunk, model=model_choice)
+                    response = await generate_with_gemini(prompt + chunk, model=model_choice)
                 else:
                     handle_error("InvalidInput", f"Unsupported provider: {provider_choice}")
                     response = "[Unsupported provider.]"

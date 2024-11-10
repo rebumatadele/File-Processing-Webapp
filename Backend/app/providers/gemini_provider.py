@@ -1,7 +1,11 @@
+# app/providers/gemini_provider.py
+
+import os
+import errno
+import asyncio
 import google.generativeai as genai
 from app.utils.retry_decorator import retry
 from app.utils.file_utils import handle_error
-import errno
 
 # Attempt to import specific exceptions; fallback to generic Exception if not available
 try:
@@ -12,11 +16,23 @@ except ImportError:
     GEMINI_EXCEPTIONS = (Exception,)
 
 @retry(max_retries=10, initial_wait=2, backoff_factor=2, exceptions=GEMINI_EXCEPTIONS)
-def generate_with_gemini(prompt, model="gemini-1.5-flash"):
+async def generate_with_gemini(prompt: str, model: str = "gemini-1.5-flash") -> str:
+    """
+    Asynchronously generates content using the Gemini API.
+
+    Args:
+        prompt (str): The input prompt for content generation.
+        model (str, optional): The Gemini model to use. Defaults to "gemini-1.5-flash".
+
+    Returns:
+        str: The generated content or an error message.
+    """
     try:
         # Ensure the API is configured
         model_instance = genai.GenerativeModel(model)
-        response = model_instance.generate_content(prompt)
+        
+        # Run the synchronous generate_content in a separate thread to avoid blocking
+        response = await asyncio.to_thread(model_instance.generate_content, prompt)
 
         # Log the raw response structure for debugging
         print("Gemini API raw response:", response)
@@ -34,8 +50,8 @@ def generate_with_gemini(prompt, model="gemini-1.5-flash"):
                     return ret
                 else:
                     # Log the safety ratings and finish reason for debugging purposes
-                    if candidate.finish_reason == "SAFETY":  # Indicates a content safety issue
-                        safety_ratings = candidate.safety_ratings if hasattr(candidate, 'safety_ratings') else []
+                    if getattr(candidate, 'finish_reason', '') == "SAFETY":  # Indicates a content safety issue
+                        safety_ratings = getattr(candidate, 'safety_ratings', [])
                         handle_error("ProcessingError", f"Gemini blocked content due to safety concerns. Safety ratings: {safety_ratings}")
                         return "[Content blocked due to safety concerns]"
                     else:

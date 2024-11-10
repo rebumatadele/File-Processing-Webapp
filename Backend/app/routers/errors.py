@@ -3,7 +3,6 @@
 from fastapi import APIRouter
 from typing import List
 from app.utils.file_utils import list_errors, clear_error_logs
-from app.models.error import ErrorLog
 
 router = APIRouter(
     prefix="/errors",
@@ -24,5 +23,8 @@ def clear_errors():
     """
     Clear all error logs.
     """
-    clear_error_logs()
-    return {"message": "Error logs cleared successfully."}
+    try:
+        clear_error_logs()
+        return {"message": "Error logs cleared successfully."}
+    except Exception as e:
+        return {"message": f"Failed to clear error logs: {e}"}

@@ -29,3 +29,4 @@ def configure_provider(config: ConfigRequest):
     except Exception as e:
         handle_error("APIError", f"Configuration failed: {e}")
         raise HTTPException(status_code=500, detail=f"Configuration failed: {e}")
+    

@@ -5,12 +5,14 @@ import time
 import shutil
 import errno
 import re
+from pathlib import Path
 
-# Define paths
-ERROR_LOG_PATH = os.path.join("logs", "error_log.txt")
-PROMPTS_DIR = os.path.join("prompts")  # Directory to store prompts
-UPLOAD_DIR = os.path.join("storage", "uploads")  # Directory to store uploaded files
-PROCESSED_DIR = os.path.join("storage", "processed")  # Directory for processed files
+# Define paths using pathlib for better path handling
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Adjust as per directory structure
+ERROR_LOG_PATH = BASE_DIR / "logs" / "error_log.txt"
+PROMPTS_DIR = BASE_DIR / "prompts"
+UPLOAD_DIR = BASE_DIR / "storage" / "uploads"
+PROCESSED_DIR = BASE_DIR / "storage" / "processed"
 
 def handle_error(error_type: str, message: str):
     """
@@ -19,7 +21,7 @@ def handle_error(error_type: str, message: str):
     timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
     formatted_error = f"[{timestamp}] - {error_type}: {message}\n"
 
-    os.makedirs(os.path.dirname(ERROR_LOG_PATH), exist_ok=True)
+    ERROR_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     try:
         with open(ERROR_LOG_PATH, "a") as log_file:
             log_file.write(formatted_error)
@@ -38,8 +40,8 @@ def list_saved_prompts() -> list:
     Lists all saved prompts in the prompts directory.
     """
     try:
-        os.makedirs(PROMPTS_DIR, exist_ok=True)
-        prompts = [f[:-4] for f in os.listdir(PROMPTS_DIR) if f.endswith('.txt')]
+        PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
+        prompts = [f.stem for f in PROMPTS_DIR.glob('*.txt')]
         return prompts
     except OSError as e:
         handle_error("ProcessingError", f"Failed to list saved prompts: {e}")
@@ -50,9 +52,9 @@ def load_prompt(name: str = "Default Prompt") -> str:
     Loads a prompt by name.
     """
     try:
-        os.makedirs(PROMPTS_DIR, exist_ok=True)
-        file_path = os.path.join(PROMPTS_DIR, f"{sanitize_file_name(name)}.txt")
-        with open(file_path, 'r', encoding='utf-8') as file:
+        PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
+        file_path = PROMPTS_DIR / f"{sanitize_file_name(name)}.txt"
+        with file_path.open('r', encoding='utf-8') as file:
             return file.read()
     except FileNotFoundError:
         handle_error("FileNotFound", f"Prompt '{name}' not found.")
@@ -66,9 +68,9 @@ def save_prompt(name: str, content: str):
     Saves a prompt with the given name and content.
     """
     try:
-        os.makedirs(PROMPTS_DIR, exist_ok=True)
-        file_path = os.path.join(PROMPTS_DIR, f"{sanitize_file_name(name)}.txt")
-        with open(file_path, 'w', encoding='utf-8') as file:
+        PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
+        file_path = PROMPTS_DIR / f"{sanitize_file_name(name)}.txt"
+        with file_path.open('w', encoding='utf-8') as file:
             file.write(content)
     except OSError as e:
         if e.errno == errno.ENOSPC:
@@ -81,9 +83,9 @@ def delete_prompt(name: str):
     Deletes a prompt by name.
     """
     try:
-        file_path = os.path.join(PROMPTS_DIR, f"{sanitize_file_name(name)}.txt")
-        if os.path.exists(file_path):
-            os.remove(file_path)
+        file_path = PROMPTS_DIR / f"{sanitize_file_name(name)}.txt"
+        if file_path.exists():
+            file_path.unlink()
         else:
             handle_error("FileNotFound", f"Prompt '{name}' does not exist.")
     except OSError as e:
@@ -94,8 +96,8 @@ def clear_error_logs():
     Clears the error logs by overwriting the log file with empty content.
     """
     try:
-        if os.path.exists(ERROR_LOG_PATH):
-            with open(ERROR_LOG_PATH, "w") as log_file:
+        if ERROR_LOG_PATH.exists():
+            with ERROR_LOG_PATH.open("w") as log_file:
                 log_file.write("")
     except OSError as e:
         handle_error("ProcessingError", f"Failed to clear error logs: {e}")
@@ -104,13 +106,13 @@ def rotate_logs(max_size: int = 10*1024*1024):
     """
     Rotates the log file if it exceeds max_size.
     """
-    if os.path.exists(ERROR_LOG_PATH) and os.path.getsize(ERROR_LOG_PATH) > max_size:
+    if ERROR_LOG_PATH.exists() and ERROR_LOG_PATH.stat().st_size > max_size:
         timestamp = time.strftime('%Y%m%d_%H%M%S')
-        archived_log = f"{ERROR_LOG_PATH}.{timestamp}.bak"
+        archived_log = BASE_DIR / f"logs/error_log_{timestamp}.bak"
         try:
-            shutil.move(ERROR_LOG_PATH, archived_log)
+            shutil.move(str(ERROR_LOG_PATH), str(archived_log))
             # Create a new empty log file
-            with open(ERROR_LOG_PATH, "w") as log_file:
+            with ERROR_LOG_PATH.open("w") as log_file:
                 log_file.write("")
         except OSError as e:
             handle_error("ProcessingError", f"Failed to rotate logs: {e}")
@@ -120,9 +122,9 @@ def list_errors() -> list:
     Retrieves the list of error logs.
     """
     try:
-        if not os.path.exists(ERROR_LOG_PATH):
+        if not ERROR_LOG_PATH.exists():
             return []
-        with open(ERROR_LOG_PATH, "r", encoding='utf-8') as log_file:
+        with ERROR_LOG_PATH.open("r", encoding='utf-8') as log_file:
             return log_file.readlines()
     except OSError as e:
         handle_error("ProcessingError", f"Failed to read error logs: {e}")
@@ -140,9 +142,9 @@ def save_uploaded_file(filename: str, content: str):
     Saves an uploaded file to the storage directory.
     """
     try:
-        os.makedirs(UPLOAD_DIR, exist_ok=True)
-        file_path = os.path.join(UPLOAD_DIR, sanitize_file_name(filename))
-        with open(file_path, 'w', encoding='utf-8') as file:
+        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+        file_path = UPLOAD_DIR / sanitize_file_name(filename)
+        with file_path.open('w', encoding='utf-8') as file:
             file.write(content)
     except OSError as e:
         handle_error("ProcessingError", f"Failed to save uploaded file '{filename}': {e}")
@@ -152,9 +154,9 @@ def get_uploaded_files() -> list:
     Lists all uploaded files.
     """
     try:
-        if not os.path.exists(UPLOAD_DIR):
+        if not UPLOAD_DIR.exists():
             return []
-        return os.listdir(UPLOAD_DIR)
+        return [f.name for f in UPLOAD_DIR.iterdir() if f.is_file()]
     except OSError as e:
         handle_error("ProcessingError", f"Failed to list uploaded files: {e}")
         return []
@@ -164,8 +166,9 @@ def load_uploaded_file_content(filename: str) -> str:
     Loads the content of an uploaded file.
     """
     try:
-        file_path = os.path.join(UPLOAD_DIR, sanitize_file_name(filename))
-        with open(file_path, 'r', encoding='utf-8') as file:
+        file_path = UPLOAD_DIR / sanitize_file_name(filename)
+        print(f"Attempting to load file: {file_path}")  # Debug log
+        with file_path.open('r', encoding='utf-8') as file:
             return file.read()
     except FileNotFoundError:
         handle_error("FileNotFound", f"Uploaded file '{filename}' not found.")
@@ -179,11 +182,11 @@ def update_file_content(filename: str, new_content: str):
     Updates the content of an uploaded file.
     """
     try:
-        file_path = os.path.join(UPLOAD_DIR, sanitize_file_name(filename))
-        if not os.path.exists(file_path):
+        file_path = UPLOAD_DIR / sanitize_file_name(filename)
+        if not file_path.exists():
             handle_error("FileNotFound", f"Uploaded file '{filename}' does not exist.")
             return
-        with open(file_path, 'w', encoding='utf-8') as file:
+        with file_path.open('w', encoding='utf-8') as file:
             file.write(new_content)
     except OSError as e:
         handle_error("ProcessingError", f"Failed to update uploaded file '{filename}': {e}")
@@ -193,9 +196,9 @@ def delete_all_files():
     Deletes all uploaded and processed files.
     """
     try:
-        if os.path.exists(UPLOAD_DIR):
+        if UPLOAD_DIR.exists():
             shutil.rmtree(UPLOAD_DIR)
-        if os.path.exists(PROCESSED_DIR):
+        if PROCESSED_DIR.exists():
             shutil.rmtree(PROCESSED_DIR)
     except OSError as e:
         handle_error("ProcessingError", f"Failed to delete all files: {e}")
@@ -205,9 +208,9 @@ def save_processed_result(filename: str, content: str):
     Saves the processed result of a file.
     """
     try:
-        os.makedirs(PROCESSED_DIR, exist_ok=True)
-        file_path = os.path.join(PROCESSED_DIR, sanitize_file_name(filename))
-        with open(file_path, 'w', encoding='utf-8') as file:
+        PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+        file_path = PROCESSED_DIR / sanitize_file_name(filename)
+        with file_path.open('w', encoding='utf-8') as file:
             file.write(content)
     except OSError as e:
         handle_error("ProcessingError", f"Failed to save processed result for '{filename}': {e}")
@@ -218,11 +221,12 @@ def get_processed_results() -> dict:
     """
     results = {}
     try:
-        if not os.path.exists(PROCESSED_DIR):
+        if not PROCESSED_DIR.exists():
             return results
-        for file in os.listdir(PROCESSED_DIR):
-            with open(os.path.join(PROCESSED_DIR, file), 'r', encoding='utf-8') as f:
-                results[file] = f.read()
+        for file in PROCESSED_DIR.iterdir():
+            if file.is_file():
+                with file.open('r', encoding='utf-8') as f:
+                    results[file.name] = f.read()
     except OSError as e:
         handle_error("ProcessingError", f"Failed to retrieve processed results: {e}")
     return results

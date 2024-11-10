@@ -9,6 +9,7 @@ from pydantic_settings import BaseSettings
 from app.utils.file_utils import handle_error
 from app.utils.retry_decorator import retry
 from dotenv import load_dotenv
+import traceback  # For detailed error logging
 
 # Load environment variables
 load_dotenv()
@@ -26,12 +27,16 @@ class EmailSettings(BaseSettings):
         env_prefix = ''  # No prefix, adjust if your env variables have a prefix
 
 # Initialize email settings
-email_settings = EmailSettings()
+try:
+    email_settings = EmailSettings()
+except Exception as e:
+    handle_error("EmailSettingsError", f"Failed to load email settings: {e}")
+    raise e
 
 @retry(max_retries=3, initial_wait=2, backoff_factor=2, exceptions=(aiosmtplib.SMTPException,))
 async def send_email(
     subject: str,
-    recipients: List[EmailStr],
+    recipients: List[str],  # Changed to List[str] since we're using plain strings
     body: str,
     attachments: List[str] = None
 ):
@@ -40,12 +45,12 @@ async def send_email(
 
     Args:
         subject (str): Subject of the email.
-        recipients (List[EmailStr]): List of recipient email addresses.
+        recipients (List[str]): List of recipient email addresses.
         body (str): Body of the email in HTML format.
         attachments (List[str], optional): List of file paths to attach. Defaults to None.
     """
     message = EmailMessage()
-    message["From"] = email_settings.MAIL_FROM
+    message["From"] = str(email_settings.MAIL_FROM)
     message["To"] = ", ".join(recipients)
     message["Subject"] = subject
     message.set_content(body, subtype="html")
@@ -74,7 +79,7 @@ async def send_email(
             smtp = aiosmtplib.SMTP(
                 hostname=email_settings.MAIL_SERVER,
                 port=email_settings.MAIL_PORT,
-                use_tls=True,
+                use_tls=True,  # SSL/TLS directly
                 username=email_settings.MAIL_USERNAME,
                 password=email_settings.MAIL_PASSWORD,
             )
@@ -91,9 +96,12 @@ async def send_email(
         await smtp.connect()
         await smtp.send_message(message)
         await smtp.quit()
+        print("Email sent successfully.")  # Debug log
     except aiosmtplib.SMTPException as e:
-        handle_error("EmailError", f"Failed to send email: {e}")
+        error_trace = traceback.format_exc()
+        handle_error("EmailError", f"Failed to send email: {e}\n{error_trace}")
         raise e  # To trigger retry
     except Exception as e:
-        handle_error("EmailError", f"Unexpected error when sending email: {e}")
+        error_trace = traceback.format_exc()
+        handle_error("EmailError", f"Unexpected error when sending email: {e}\n{error_trace}")
         raise e  # To trigger retry

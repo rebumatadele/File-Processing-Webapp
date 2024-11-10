@@ -27,7 +27,7 @@ async def upload_files(files: List[UploadFile] = File(...)):
         saved_files = []
         for file in files:
             if not file.filename.endswith(".txt"):
-                raise HTTPException(status_code=400, detail="Only .txt files are allowed.")
+                raise HTTPException(status_code=400, detail=f"Only .txt files are allowed. '{file.filename}' is not allowed.")
             content = await file.read()
             content_str = content.decode('utf-8')
             save_uploaded_file(file.filename, content_str)
