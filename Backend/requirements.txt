@@ -1,0 +1,15 @@
+openai
+tiktoken
+google-generativeai
+streamlit
+python-dotenv
+anthropic
+curl_cffi
+nltk
+fastapi
+uvicorn
+pydantic
+python-multipart
+fastapi-mail
+aiosmtplib
+pydantic-settings
