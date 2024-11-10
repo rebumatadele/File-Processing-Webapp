@@ -3,6 +3,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import config, errors, cache, prompts, files, processing, results
+from app.utils.environment import load_environment_variables
+from dotenv import load_dotenv
+
+# Load environment variables at the very start
+load_environment_variables()
 
 app = FastAPI(
     title="Text Processor with Generative AI",

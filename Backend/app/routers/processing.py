@@ -66,11 +66,34 @@ async def process_texts_task(task_id: str, settings: ProcessingSettings):
     Asynchronous background task to process text files and send emails after processing each file.
     """
     try:
-        env_vars = os.environ  # Already loaded in main.py via load_environment_variables
+        # Load environment variables (already loaded in main.py via load_environment_variables)
+        env_vars = os.environ
         uploaded_files = get_uploaded_files()
         if not uploaded_files:
             handle_error("ProcessingError", "No uploaded files found.")
             task_status[task_id] = "Failed: No uploaded files."
+            return
+
+        # Prepare API keys: prioritize user-provided keys over environment variables
+        api_keys = {
+            "OPENAI_API_KEY": settings.openai_api_key or env_vars.get("OPENAI_API_KEY"),
+            "ANTHROPIC_API_KEY": settings.anthropic_api_key or env_vars.get("ANTHROPIC_API_KEY"),
+            "GEMINI_API_KEY": settings.gemini_api_key or env_vars.get("GEMINI_API_KEY"),
+        }
+
+        # Verify that required API keys are available based on provider_choice
+        provider = settings.provider_choice.lower()
+        if provider == "openai" and not api_keys.get("OPENAI_API_KEY"):
+            handle_error("ConfigurationError", "OpenAI API key not provided.")
+            task_status[task_id] = "Failed: OpenAI API key not provided."
+            return
+        elif provider == "anthropic" and not api_keys.get("ANTHROPIC_API_KEY"):
+            handle_error("ConfigurationError", "Anthropic API key not provided.")
+            task_status[task_id] = "Failed: Anthropic API key not provided."
+            return
+        elif provider == "gemini" and not api_keys.get("GEMINI_API_KEY"):
+            handle_error("ConfigurationError", "Gemini API key not provided.")
+            task_status[task_id] = "Failed: Gemini API key not provided."
             return
 
         # Define a semaphore to limit concurrency (e.g., max 5 concurrent tasks)
@@ -91,7 +114,7 @@ async def process_texts_task(task_id: str, settings: ProcessingSettings):
                         chunk_size=settings.chunk_size,
                         chunk_by=settings.chunk_by,
                         model_choice=settings.selected_model,  # Updated reference
-                        api_keys=env_vars
+                        api_keys=api_keys
                     )
                     merged_text = "\n".join(responses)
                     save_processed_result(file, merged_text)

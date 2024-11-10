@@ -1,12 +1,17 @@
 # app/models/processing.py
 
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 
 class ProcessingSettings(BaseModel):
-    chunk_size: int = Field(..., example=500, ge=1, le=5000)
-    chunk_by: str = Field(..., example="words", pattern="^(words|sentences|paragraphs)$")
-    provider_choice: str = Field(..., example="Gemini")
-    selected_model: Optional[str] = Field(None, example="gemini-1.5-flash")  # Renamed field
-    prompt: str = Field(..., example="Your prompt here.")
-    email: EmailStr = Field(..., example="user@gmail.com")
+    provider_choice: str = Field(..., description="Choice of AI provider (e.g., 'openai', 'anthropic', 'gemini')")
+    prompt: str = Field(..., description="Prompt to send to the AI model")
+    chunk_size: Optional[int] = Field(1024, description="Size of text chunks")
+    chunk_by: Optional[str] = Field("word", description="Method to chunk text ('word', 'character')")
+    selected_model: Optional[str] = Field(None, description="Specific model choice if applicable")
+    email: EmailStr = Field(..., description="Email address to send the processed files to")
+    
+    # User-provided API keys
+    openai_api_key: Optional[str] = Field(None, description="User's OpenAI API Key")
+    anthropic_api_key: Optional[str] = Field(None, description="User's Anthropic API Key")
+    gemini_api_key: Optional[str] = Field(None, description="User's Gemini API Key")

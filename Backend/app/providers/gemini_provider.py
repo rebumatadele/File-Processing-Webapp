@@ -16,21 +16,28 @@ except ImportError:
     GEMINI_EXCEPTIONS = (Exception,)
 
 @retry(max_retries=10, initial_wait=2, backoff_factor=2, exceptions=GEMINI_EXCEPTIONS)
-async def generate_with_gemini(prompt: str, model: str = "gemini-1.5-flash") -> str:
+async def generate_with_gemini(prompt: str, model: str = "gemini-1.5-flash", api_key: str = None) -> str:
     """
     Asynchronously generates content using the Gemini API.
 
     Args:
         prompt (str): The input prompt for content generation.
         model (str, optional): The Gemini model to use. Defaults to "gemini-1.5-flash".
+        api_key (str, optional): Your Gemini API key. If not provided, it will be fetched from environment variables.
 
     Returns:
         str: The generated content or an error message.
     """
     try:
-        # Ensure the API is configured
-        model_instance = genai.GenerativeModel(model)
-        
+        # Ensure the API is configured with the provided API key
+        if api_key:
+            genai.configure(api_key=api_key)
+            model_instance = genai.GenerativeModel(model)
+        else:
+            # Fallback to environment variable
+            genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+            model_instance = genai.GenerativeModel(model)
+
         # Run the synchronous generate_content in a separate thread to avoid blocking
         response = await asyncio.to_thread(model_instance.generate_content, prompt)
 
