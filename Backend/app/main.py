@@ -22,6 +22,8 @@ app = FastAPI(
 origins = [
     "http://localhost",
     "http://localhost:3000",
+    "http://fileprocessor.netlify.app/",
+    "https://fileprocessor.netlify.app/"
     # Add your frontend URL here
 ]
 
