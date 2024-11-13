@@ -26,7 +26,7 @@ const Navbar = () => {
   ]
 
   return (
-    <NavigationMenu className="max-w-full w-full justify-start">
+    <NavigationMenu className="max-w-full w-full justify-center">
       <NavigationMenuList className="flex-wrap gap-2 p-4 bg-background border-b">
         {navLinks.map((link) => (
           <NavigationMenuItem key={link.href}>
