@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { motion } from 'framer-motion'
-import { Settings, MessageSquare, FolderOpen, Play, FileText, Menu, X, PercentIcon } from 'lucide-react'
+import { Settings, MessageSquare, FolderOpen, Play, FileText, Menu, X, PercentIcon, AlertTriangle } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -19,7 +19,8 @@ const navItems = [
   { name: "File Management", href: "/file-management", icon: FolderOpen },
   { name: "Processing", href: "/processing", icon: Play },
   { name: "Results", href: "/results", icon: FileText },
-  {name: "Usage", href: "/usage", icon: PercentIcon}
+  { name: "Error", href: "/errors", icon: AlertTriangle },
+  { name: "Usage", href: "/usage", icon: PercentIcon }
 ]
 
 export default function Navbar() {
@@ -51,9 +52,6 @@ export default function Navbar() {
               </Link>
             ))}
           </div>
-          <div className="hidden sm:ml-6 sm:flex sm:items-center">
-            <Button variant="outline">Sign In</Button>
-          </div>
           <div className="-mr-2 flex items-center sm:hidden">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -81,9 +79,6 @@ export default function Navbar() {
                     </Link>
                   </DropdownMenuItem>
                 ))}
-                <DropdownMenuItem>
-                  <Button variant="outline" className="w-full">Sign In</Button>
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -118,11 +113,6 @@ export default function Navbar() {
               </div>
             </Link>
           ))}
-        </div>
-        <div className="pt-4 pb-3 border-t border-border">
-          <div className="mt-3 space-y-1">
-            <Button variant="outline" className="w-full">Sign In</Button>
-          </div>
         </div>
       </motion.div>
     </nav>
