@@ -7,20 +7,20 @@ import {
   CardContent,
   CardHeader,
   CardTitle,
-  CardDescription
+  CardDescription,
+  CardFooter
 } from '@/components/ui/card'
-import { useToast } from '@/hooks/use-toast' // Importing the useToast hook
+import { ScrollArea } from '@/components/ui/scroll-area'
+import { useToast } from '@/hooks/use-toast'
 import { getErrorLogs, clearErrors } from '../../api/errorUtils'
+import { AlertTriangleIcon, RefreshCwIcon, TrashIcon } from 'lucide-react'
 
-export default function Errors() {
+export default function ErrorLogsPage() {
   const [errors, setErrors] = useState<string[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [clearing, setClearing] = useState<boolean>(false)
-  
-  // Instantiate toast from the useToast hook
   const { toast } = useToast()
 
-  // Fetch errors from the backend
   const fetchErrors = async () => {
     setLoading(true)
     try {
@@ -37,7 +37,6 @@ export default function Errors() {
     }
   }
 
-  // Clear all error logs
   const handleClearErrors = async () => {
     setClearing(true)
     try {
@@ -63,35 +62,63 @@ export default function Errors() {
   }, [])
 
   return (
-    <div className="container mx-auto py-10">
-      <Card className="max-w-2xl mx-auto">
-        <CardHeader>
-          <CardTitle>Error Logs</CardTitle>
-          <CardDescription>View and manage application error logs.</CardDescription>
+    <div className="container mx-auto py-10 min-h-screen flex items-center justify-center">
+      <Card className="w-full max-w-4xl">
+        <CardHeader className="bg-destructive/10 rounded-t-lg">
+          <div className="flex items-center space-x-2">
+            <AlertTriangleIcon className="text-destructive h-6 w-6" />
+            <CardTitle className="text-2xl font-bold">Error Logs</CardTitle>
+          </div>
+          <CardDescription className="text-destructive-foreground/80">
+            View and manage application error logs.
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="flex space-x-4 mb-4">
-            <Button variant="secondary" onClick={fetchErrors} disabled={loading}>
-              {loading ? 'Refreshing...' : 'Refresh'}
+        <CardContent className="p-6">
+          <div className="flex justify-between items-center mb-4">
+            <Button
+              variant="outline"
+              onClick={fetchErrors}
+              disabled={loading}
+              className="flex items-center space-x-2"
+            >
+              <RefreshCwIcon className="h-4 w-4" />
+              <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
             </Button>
-            <Button variant="secondary" onClick={handleClearErrors} disabled={clearing}>
-              {clearing ? 'Clearing...' : 'Clear Logs'}
+            <Button
+              variant="destructive"
+              onClick={handleClearErrors}
+              disabled={clearing}
+              className="flex items-center space-x-2"
+            >
+              <TrashIcon className="h-4 w-4" />
+              <span>{clearing ? 'Clearing...' : 'Clear Logs'}</span>
             </Button>
           </div>
-          {loading ? (
-            <p>Loading error logs...</p>
-          ) : errors.length === 0 ? (
-            <p>No error logs available.</p>
-          ) : (
-            <ul className="space-y-2">
-              {errors.map((error, index) => (
-                <li key={index} className="text-red-600">
-                  {error}
-                </li>
-              ))}
-            </ul>
-          )}
+          <ScrollArea className="h-[400px] rounded-md border p-4">
+            {loading ? (
+              <div className="flex items-center justify-center h-full">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : errors.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                <AlertTriangleIcon className="h-12 w-12 mb-2" />
+                <p>No error logs available.</p>
+              </div>
+            ) : (
+              <ul className="space-y-2">
+                {errors.map((error, index) => (
+                  <li key={index} className="bg-destructive/10 text-destructive rounded-md p-3 text-sm">
+                    {error}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </ScrollArea>
         </CardContent>
+        <CardFooter className="bg-muted/50 rounded-b-lg flex justify-between items-center text-sm text-muted-foreground">
+          <span>Last updated: {new Date().toLocaleString()}</span>
+          <span>{errors.length} error{errors.length !== 1 ? 's' : ''} logged</span>
+        </CardFooter>
       </Card>
     </div>
   )

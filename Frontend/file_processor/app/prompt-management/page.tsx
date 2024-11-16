@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/hooks/use-toast"
-import { Trash2, Plus, Save } from 'lucide-react'
+import { Trash2, Plus, Save, Edit2, FileText, List } from 'lucide-react'
 import { listPrompts, loadPrompt, savePrompt, deletePrompt } from '../../api/promptUtils'
 
 type Prompt = {
@@ -20,32 +21,38 @@ export default function PromptManagementPage() {
   const [prompts, setPrompts] = useState<Prompt[]>([])
   const [selectedPrompt, setSelectedPrompt] = useState<Prompt | null>(null)
   const [isEditing, setIsEditing] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   
   const { toast } = useToast()
 
   useEffect(() => {
-    const fetchPrompts = async () => {
-      try {
-        const promptNames = await listPrompts()
-        const fetchedPrompts = await Promise.all(
-          promptNames.map(async (name) => {
-            const prompt = await loadPrompt(name)
-            return { ...prompt, id: name }
-          })
-        )
-        setPrompts(fetchedPrompts)
-      } catch {
-        toast({
-          title: "Error",
-          description: "Failed to fetch prompts.",
-          variant: "destructive",
-        })
-      }
-    }
     fetchPrompts()
   }, [])
 
+  const fetchPrompts = async () => {
+    setIsLoading(true)
+    try {
+      const promptNames = await listPrompts()
+      const fetchedPrompts = await Promise.all(
+        promptNames.map(async (name) => {
+          const prompt = await loadPrompt(name)
+          return { ...prompt, id: name }
+        })
+      )
+      setPrompts(fetchedPrompts)
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to fetch prompts.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const handleSelectPrompt = async (promptId: string) => {
+    setIsLoading(true)
     const prompt = prompts.find(p => p.id === promptId)
     if (prompt) {
       setSelectedPrompt(prompt)
@@ -62,6 +69,7 @@ export default function PromptManagementPage() {
         })
       }
     }
+    setIsLoading(false)
   }
 
   const handleCreateNewPrompt = () => {
@@ -77,6 +85,7 @@ export default function PromptManagementPage() {
 
   const handleSavePrompt = async () => {
     if (selectedPrompt) {
+      setIsLoading(true)
       try {
         await savePrompt(selectedPrompt)
         setPrompts(prompts.map(p => (p.id === selectedPrompt.id ? selectedPrompt : p)))
@@ -91,12 +100,15 @@ export default function PromptManagementPage() {
           description: "Failed to save the prompt.",
           variant: "destructive",
         })
+      } finally {
+        setIsLoading(false)
       }
     }
   }
 
   const handleDeletePrompt = async () => {
     if (selectedPrompt) {
+      setIsLoading(true)
       try {
         await deletePrompt(selectedPrompt.name)
         setPrompts(prompts.filter(p => p.id !== selectedPrompt.id))
@@ -113,30 +125,31 @@ export default function PromptManagementPage() {
           description: "Failed to delete the prompt.",
           variant: "destructive",
         })
+      } finally {
+        setIsLoading(false)
       }
     }
   }
 
   return (
     <div className="container mx-auto py-10">
-      <Card className="max-w-4xl mx-auto">
-        <CardHeader>
-          <CardTitle>Prompt Management</CardTitle>
+      <Card className="w-full max-w-4xl mx-auto">
+        <CardHeader className="bg-primary/10 rounded-t-lg">
+          <CardTitle className="text-2xl font-bold flex items-center gap-2">
+            <FileText className="h-6 w-6 text-primary" />
+            Prompt Management
+          </CardTitle>
           <CardDescription>View, edit, create, and delete prompts for your AI processing.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="p-6 space-y-6">
           <div className="flex justify-between items-center">
             <Select onValueChange={handleSelectPrompt} value={selectedPrompt?.id || ""}>
-              <SelectTrigger className="w-[200px] bg-white border border-gray-300">
+              <SelectTrigger className="w-[200px]">
                 <SelectValue placeholder="Select a prompt" />
               </SelectTrigger>
-              <SelectContent className="bg-white border border-gray-300 rounded-md shadow-lg">
+              <SelectContent>
                 {prompts.map(prompt => (
-                  <SelectItem
-                    key={prompt.id}
-                    value={prompt.id}
-                    className="px-4 py-2 hover:bg-gray-100 focus:bg-gray-100 text-black"
-                  >
+                  <SelectItem key={prompt.id} value={prompt.id}>
                     {prompt.name}
                   </SelectItem>
                 ))}
@@ -146,41 +159,69 @@ export default function PromptManagementPage() {
               <Plus className="mr-2 h-4 w-4" /> New Prompt
             </Button>
           </div>
+          <Card className="bg-secondary/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                <List className="h-5 w-5 text-primary" />
+                Prompt List
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-[200px] w-full rounded-md border p-4">
+                {prompts.map(prompt => (
+                  <Button
+                    key={prompt.id}
+                    variant="ghost"
+                    className="w-full justify-start mb-2"
+                    onClick={() => handleSelectPrompt(prompt.id)}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    {prompt.name}
+                  </Button>
+                ))}
+              </ScrollArea>
+            </CardContent>
+          </Card>
           {selectedPrompt && (
-            <div className="space-y-4">
-              <Input
-                placeholder="Prompt Name"
-                value={selectedPrompt.name}
-                onChange={(e) => setSelectedPrompt({ ...selectedPrompt, name: e.target.value })}
-                disabled={!isEditing}
-                className="bg-white border border-gray-300"
-              />
-              <Textarea
-                placeholder="Prompt Content"
-                value={selectedPrompt.content}
-                onChange={(e) => setSelectedPrompt({ ...selectedPrompt, content: e.target.value })}
-                disabled={!isEditing}
-                className="min-h-[200px] bg-white border border-gray-300"
-              />
-            </div>
+            <Card className="bg-muted/30">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-primary" />
+                  {isEditing ? 'Edit Prompt' : 'Prompt Details'}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Input
+                  placeholder="Prompt Name"
+                  value={selectedPrompt.name}
+                  onChange={(e) => setSelectedPrompt({ ...selectedPrompt, name: e.target.value })}
+                  disabled={!isEditing || isLoading}
+                />
+                <Textarea
+                  placeholder="Prompt Content"
+                  value={selectedPrompt.content}
+                  onChange={(e) => setSelectedPrompt({ ...selectedPrompt, content: e.target.value })}
+                  disabled={!isEditing || isLoading}
+                  className="min-h-[200px]"
+                />
+              </CardContent>
+              <CardFooter className="flex justify-end space-x-2">
+                {isEditing ? (
+                  <Button onClick={handleSavePrompt} disabled={isLoading}>
+                    <Save className="mr-2 h-4 w-4" /> Save
+                  </Button>
+                ) : (
+                  <Button onClick={() => setIsEditing(true)} disabled={isLoading}>
+                    <Edit2 className="mr-2 h-4 w-4" /> Edit
+                  </Button>
+                )}
+                <Button variant="destructive" onClick={handleDeletePrompt} disabled={isLoading}>
+                  <Trash2 className="mr-2 h-4 w-4" /> Delete
+                </Button>
+              </CardFooter>
+            </Card>
           )}
         </CardContent>
-        <CardFooter className="flex justify-between">
-          <Button variant="destructive" onClick={handleDeletePrompt} disabled={!selectedPrompt}>
-            <Trash2 className="mr-2 h-4 w-4" /> Delete
-          </Button>
-          <div className="space-x-2">
-            {isEditing ? (
-              <Button onClick={handleSavePrompt}>
-                <Save className="mr-2 h-4 w-4" /> Save
-              </Button>
-            ) : (
-              <Button onClick={() => setIsEditing(true)} disabled={!selectedPrompt}>
-                Edit
-              </Button>
-            )}
-          </div>
-        </CardFooter>
       </Card>
     </div>
   )
