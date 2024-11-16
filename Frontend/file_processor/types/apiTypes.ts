@@ -70,3 +70,15 @@ export interface ProcessingResult {
 export interface GetAllResultsResponse {
   [filename: string]: string;
 }
+
+export interface ClearCacheResponse {
+  message: string;
+}
+
+export interface CacheSizeResponse {
+  cache_size_bytes: number;
+}
+
+export interface CacheContentsResponse {
+  cache_contents: string[];
+}

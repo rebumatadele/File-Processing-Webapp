@@ -4,6 +4,8 @@ from fastapi import APIRouter, HTTPException, UploadFile, File
 from typing import List
 from app.models.file import UploadedFileInfo
 from app.utils.file_utils import (
+    get_processed_files_size,
+    get_uploaded_files_size,
     save_uploaded_file,
     get_uploaded_files,
     load_uploaded_file_content,
@@ -90,3 +92,27 @@ def clear_files():
     except Exception as e:
         handle_error("ProcessingError", f"Failed to clear files: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to clear files: {e}")
+
+@router.get("/size/uploaded", summary="Get Uploaded Files Size")
+def get_uploaded_files_size_endpoint():
+    """
+    Get the total size of uploaded files in bytes.
+    """
+    try:
+        size = get_uploaded_files_size()
+        return {"uploaded_files_size_bytes": size}
+    except Exception as e:
+        handle_error("ProcessingError", f"Failed to get uploaded files size: {e}")
+        return {"message": f"Failed to get uploaded files size: {e}"}
+
+@router.get("/size/processed", summary="Get Processed Files Size")
+def get_processed_files_size_endpoint():
+    """
+    Get the total size of processed files in bytes.
+    """
+    try:
+        size = get_processed_files_size()
+        return {"processed_files_size_bytes": size}
+    except Exception as e:
+        handle_error("ProcessingError", f"Failed to get processed files size: {e}")
+        return {"message": f"Failed to get processed files size: {e}"}

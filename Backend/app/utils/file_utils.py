@@ -1,11 +1,14 @@
 # app/utils/file_utils.py
 
+import hashlib
 import os
 import time
 import shutil
 import errno
 import re
 from pathlib import Path
+import json
+from typing import Optional
 
 # Define paths using pathlib for better path handling
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Adjust as per directory structure
@@ -13,6 +16,15 @@ ERROR_LOG_PATH = BASE_DIR / "logs" / "error_log.txt"
 PROMPTS_DIR = BASE_DIR / "prompts"
 UPLOAD_DIR = BASE_DIR / "storage" / "uploads"
 PROCESSED_DIR = BASE_DIR / "storage" / "processed"
+
+CONFIG_DIR = BASE_DIR / "config"
+USER_CONFIG_FILE = CONFIG_DIR / "user_configs.json"
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Adjust as per directory structure
+CACHE_DIR = BASE_DIR / "cache"
+
+# Ensuring CACHE_DIR exists
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 def handle_error(error_type: str, message: str):
     """
@@ -132,10 +144,14 @@ def list_errors() -> list:
 
 def clear_cache():
     """
-    Placeholder for cache clearing logic.
+    Clears the application cache by deleting all files in the cache directory.
     """
-    # Implement cache clearing logic if necessary
-    pass
+    try:
+        if CACHE_DIR.exists():
+            shutil.rmtree(CACHE_DIR)
+            CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        handle_error("ProcessingError", f"Failed to clear cache: {e}")
 
 def save_uploaded_file(filename: str, content: str):
     """
@@ -230,3 +246,146 @@ def get_processed_results() -> dict:
     except OSError as e:
         handle_error("ProcessingError", f"Failed to retrieve processed results: {e}")
     return results
+
+def get_uploaded_files_size() -> int:
+    """
+    Calculates the total size of all uploaded files in bytes.
+    """
+    total_size = 0
+    try:
+        if not UPLOAD_DIR.exists():
+            return total_size
+        for file in UPLOAD_DIR.iterdir():
+            if file.is_file():
+                total_size += file.stat().st_size
+    except OSError as e:
+        handle_error("ProcessingError", f"Failed to calculate uploaded files size: {e}")
+    return total_size
+
+def get_processed_files_size() -> int:
+    """
+    Calculates the total size of all processed files in bytes.
+    """
+    total_size = 0
+    try:
+        if not PROCESSED_DIR.exists():
+            return total_size
+        for file in PROCESSED_DIR.iterdir():
+            if file.is_file():
+                total_size += file.stat().st_size
+    except OSError as e:
+        handle_error("ProcessingError", f"Failed to calculate processed files size: {e}")
+    return total_size
+
+def save_user_config(user_id: str, config: dict):
+    """
+    Saves the user configuration to a JSON file.
+    """
+    try:
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+        if USER_CONFIG_FILE.exists():
+            with USER_CONFIG_FILE.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+        else:
+            data = {}
+        data[user_id] = config
+        with USER_CONFIG_FILE.open('w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4)
+    except OSError as e:
+        handle_error("ProcessingError", f"Failed to save user config for {user_id}: {e}")
+
+def get_user_config(user_id: str) -> Optional[dict]:
+    """
+    Retrieves the user configuration from the JSON file.
+    """
+    try:
+        if not USER_CONFIG_FILE.exists():
+            return None
+        with USER_CONFIG_FILE.open('r', encoding='utf-8') as f:
+            data = json.load(f)
+        return data.get(user_id)
+    except OSError as e:
+        handle_error("ProcessingError", f"Failed to retrieve user config for {user_id}: {e}")
+        return None
+    
+    
+
+# Cache-related functions
+
+def generate_cache_key(chunk: str, provider_choice: str, model_choice: Optional[str] = None) -> str:
+    """
+    Generates a SHA256 hash key based on the chunk content and configuration.
+    """
+    key_string = f"{provider_choice}:{model_choice}:{chunk}"
+    return hashlib.sha256(key_string.encode('utf-8')).hexdigest()
+
+def get_cache_file_path(cache_key: str) -> Path:
+    """
+    Returns the file path for a given cache key.
+    """
+    return CACHE_DIR / f"{cache_key}.json"
+
+def get_cached_result(chunk: str, provider_choice: str, model_choice: Optional[str] = None) -> Optional[str]:
+    """
+    Retrieves the cached result for a given chunk and configuration.
+    Returns None if not found.
+    """
+    cache_key = generate_cache_key(chunk, provider_choice, model_choice)
+    cache_file = get_cache_file_path(cache_key)
+    if cache_file.exists():
+        try:
+            with cache_file.open('r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data.get("result")
+        except (OSError, json.JSONDecodeError) as e:
+            handle_error("CacheError", f"Failed to read cache file {cache_file}: {e}")
+            return None
+    return None
+
+def set_cached_result(chunk: str, provider_choice: str, model_choice: Optional[str], result: str):
+    """
+    Caches the result for a given chunk and configuration.
+    """
+    cache_key = generate_cache_key(chunk, provider_choice, model_choice)
+    cache_file = get_cache_file_path(cache_key)
+    data = {
+        "chunk": chunk,
+        "provider_choice": provider_choice,
+        "model_choice": model_choice,
+        "result": result,
+        "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+    }
+    try:
+        with cache_file.open('w', encoding='utf-8') as f:
+            json.dump(data, f)
+    except OSError as e:
+        handle_error("CacheError", f"Failed to write cache file {cache_file}: {e}")
+
+def get_cache_size() -> int:
+    """
+    Calculates the total size of the cache in bytes.
+    """
+    total_size = 0
+    try:
+        if not CACHE_DIR.exists():
+            return total_size
+        for dirpath, dirnames, filenames in os.walk(CACHE_DIR):
+            for f in filenames:
+                fp = os.path.join(dirpath, f)
+                if os.path.isfile(fp):
+                    total_size += os.path.getsize(fp)
+    except OSError as e:
+        handle_error("ProcessingError", f"Failed to calculate cache size: {e}")
+    return total_size
+
+def list_cache_contents() -> list:
+    """
+    Lists all files in the cache directory.
+    """
+    try:
+        if not CACHE_DIR.exists():
+            return []
+        return [f.name for f in CACHE_DIR.iterdir() if f.is_file()]
+    except OSError as e:
+        handle_error("ProcessingError", f"Failed to list cache contents: {e}")
+        return []
