@@ -10,7 +10,7 @@ import {
   navigationMenuTriggerStyle,
 } from "@/components/ui/navigation-menu"
 import { cn } from "@/lib/utils"
-import { Home, Settings, MessageSquare, FolderOpen, Play, FileText, AlertCircle } from 'lucide-react'
+import { Home, Settings, MessageSquare, FolderOpen, Play, FileText, AlertCircle, PercentCircle } from 'lucide-react'
 
 const Navbar = () => {
   const pathname = usePathname()
@@ -23,6 +23,7 @@ const Navbar = () => {
     { href: '/processing', label: 'Processing', icon: Play },
     { href: '/results', label: 'Results', icon: FileText },
     { href: '/errors', label: 'Errors', icon: AlertCircle },
+    { href: '/usage', label: 'Usage', icon: PercentCircle },
   ]
 
   return (

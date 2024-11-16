@@ -6,47 +6,47 @@
 
 :root {
   /* Background and Foreground */
-  --background: 0 0% 100%;              /* White */
-  --foreground: 0 0% 0%;               /* Black */
+  --background: 180 16% 99%;           /* Very Light Teal */
+  --foreground: 180 100% 10%;          /* Very Dark Teal */
 
   /* Primary and Secondary */
-  --primary: 220 100% 50%;              /* Blue */
-  --primary-foreground: 0 0% 100%;     /* White */
-  --secondary: 120 70% 50%;            /* Green */
-  --secondary-foreground: 0 0% 100%;   /* White */
+  --primary: 180 100% 25%;             /* Deep Teal */
+  --primary-foreground: 180 16% 99%;   /* Very Light Teal */
+  --secondary: 180 60% 50%;            /* Medium Teal */
+  --secondary-foreground: 180 16% 99%; /* Very Light Teal */
 
   /* Muted Colors */
-  --muted: 0 0% 90%;                    /* Light Gray */
-  --muted-foreground: 0 0% 30%;        /* Dark Gray */
+  --muted: 180 20% 90%;                /* Light Muted Teal */
+  --muted-foreground: 180 30% 30%;     /* Dark Muted Teal */
 
   /* Destructive Colors */
-  --destructive: 0 100% 50%;           /* Red */
-  --destructive-foreground: 0 0% 100%; /* White */
+  --destructive: 0 100% 50%;           /* Red (kept for contrast) */
+  --destructive-foreground: 180 16% 99%; /* Very Light Teal */
 
   /* Border and Input Colors */
-  --border: 0 0% 90%;                   /* Light Gray */
-  --input: 0 0% 95%;                    /* Off White */
-  --ring: 220 100% 50%;                 /* Blue for focus ring */
+  --border: 180 30% 85%;               /* Light Teal Border */
+  --input: 180 20% 95%;                /* Very Light Teal Input */
+  --ring: 180 100% 25%;                /* Deep Teal for focus ring */
 
   /* Popover */
-  --popover: 0 0% 100%;                  /* White */
-  --popover-foreground: 0 0% 0%;        /* Black */
+  --popover: 180 16% 99%;              /* Very Light Teal */
+  --popover-foreground: 180 100% 10%;  /* Very Dark Teal */
 
   /* Card */
-  --card: 0 0% 100%;                     /* White */
-  --card-foreground: 0 0% 0%;           /* Black */
+  --card: 180 16% 99%;                 /* Very Light Teal */
+  --card-foreground: 180 100% 10%;     /* Very Dark Teal */
 
   /* Accent */
-  --accent: 45 100% 50%;                 /* Yellow-Orange (matches Upwork's accent) */
-  --accent-foreground: 0 0% 100%;       /* White */
+  --accent: 180 80% 40%;               /* Bright Teal Accent */
+  --accent-foreground: 180 16% 99%;    /* Very Light Teal */
 
   /* Additional Colors for Charts or Specific UI Needs */
-  --chart-1: 174 53% 53%;                /* Example color */
-  --chart-2: 50 100% 50%;                /* Example color */
-  --chart-3: 210 100% 50%;               /* Example color */
-  --chart-4: 270 100% 75%;               /* Example color */
-  --chart-5: 30 100% 50%;                /* Example color */
+  --chart-1: 180 100% 25%;             /* Deep Teal */
+  --chart-2: 180 60% 50%;              /* Medium Teal */
+  --chart-3: 180 40% 75%;              /* Light Teal */
+  --chart-4: 180 30% 90%;              /* Very Light Teal */
+  --chart-5: 180 80% 40%;              /* Bright Teal */
 
   /* Radius */
-  --radius: 0.5rem; /* Example radius */
+  --radius: 0.5rem; /* Kept the same */
 }
