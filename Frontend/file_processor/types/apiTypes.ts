@@ -82,3 +82,28 @@ export interface CacheSizeResponse {
 export interface CacheContentsResponse {
   cache_contents: string[];
 }
+// src/types/apiTypes.ts
+
+export interface SaveUserConfigRequest {
+  user_id: string;
+  openai_api_key?: string;
+  anthropic_api_key?: string;
+  gemini_api_key?: string;
+}
+
+export interface SaveUserConfigResponse {
+  message: string;
+}
+
+export interface GetUserConfigResponse {
+  user_id: string;
+  openai_api_key?: string;
+  anthropic_api_key?: string;
+  gemini_api_key?: string;
+}
+
+
+export interface GetFilesSizeResponse {
+  uploaded_files_size_bytes?: number;
+  processed_files_size_bytes?: number;
+}

@@ -1,3 +1,5 @@
+// src/pages/ConfigurationPage.tsx
+
 'use client'
 
 import { useState } from 'react'
@@ -26,6 +28,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
 import { configureProvider } from '../../api/configUtils'
+import { ConfigRequest } from '@/types/apiTypes'
 
 const formSchema = z.object({
   selected_model: z.string().min(1, 'Please select a model'),
@@ -41,7 +44,6 @@ const formSchema = z.object({
   path: ['api_key'], // this specifies that the error is on the api_key field
 });
 
-
 type FormValues = z.infer<typeof formSchema>
 
 export default function ConfigurationPage() {
@@ -54,26 +56,31 @@ export default function ConfigurationPage() {
     defaultValues: {
       selected_model: 'gemini-1.5-flash',
       provider_choice: 'Gemini',
-      api_key: 'AIzaSyARFySyhjCOD4VLh0r6TB_EOy1CTTk7TaA',
+      api_key: '',
     },
   })
 
   const onSubmit = async (data: FormValues) => {
     setIsLoading(true)
     try {
-      await configureProvider({
+      const configRequest: ConfigRequest = {
         provider_choice: data.provider_choice,
         selected_model: data.selected_model,
         api_key: data.api_key,
-      })
+      }
+
+      // Configure the AI provider
+      await configureProvider(configRequest)
+
       toast({
         title: "Configuration saved",
         description: "Your AI model preferences have been updated.",
       })
-    } catch{
+      form.reset() // Optionally reset the form after successful submission
+    } catch (error: unknown) {
       toast({
         title: "Error",
-        description: "Failed to save configuration. Please try again.",
+        description: (error instanceof Error ? error.message : "Failed to save configuration. Please try again."),
         variant: "destructive",
       })
     } finally {
@@ -97,13 +104,14 @@ export default function ConfigurationPage() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+              {/* AI Provider Selection */}
               <FormField
                 control={form.control}
                 name="provider_choice"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>AI Provider</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger className="bg-white text-black border border-gray-300">
                           <SelectValue placeholder="Select an AI provider" />
@@ -122,6 +130,8 @@ export default function ConfigurationPage() {
                   </FormItem>
                 )}
               />
+
+              {/* Model Selection */}
               <FormField
                 control={form.control}
                 name="selected_model"
@@ -147,6 +157,8 @@ export default function ConfigurationPage() {
                   </FormItem>
                 )}
               />
+
+              {/* API Key Input */}
               <FormField
                 control={form.control}
                 name="api_key"
@@ -164,18 +176,21 @@ export default function ConfigurationPage() {
                       <button
                         type="button"
                         onClick={() => setShowApiKey(!showApiKey)}
-                        className="absolute right-2 top-2"
+                        className="absolute right-2 top-2 bg-transparent border-none p-0"
+                        aria-label={showApiKey ? "Hide API Key" : "Show API Key"}
                       >
                         {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
                     <FormDescription>
-                      Enter your API key for the selected provider. For OpenAI and Anthropic, it should start with sk-.
+                      Enter your API key for the selected provider. For OpenAI and Anthropic, it should start with <code>sk-</code>.
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
+              {/* Submit Button */}
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? "Saving..." : "Save Configuration"}
               </Button>

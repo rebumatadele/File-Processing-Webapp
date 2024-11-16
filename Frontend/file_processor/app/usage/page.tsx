@@ -1,18 +1,29 @@
 // src/pages/UsagePage.tsx
 
+"use client"
+
 import React, { useState, useEffect } from 'react';
 import { Card, CardHeader, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { clearCache, getCacheSize, listCacheContents } from '@/api/cacheUtils';
-import { clearFiles as clearAllFiles } from '@/api/fileUtils';
+import { clearFiles, listFiles, getFileContent } from '@/api/fileUtils';
+import { getAllResults } from '@/api/resultsUtils';
+import { ProcessingResult } from '@/types/apiTypes';
 
 const UsagePage = () => {
-    const [cacheMessage, setCacheMessage] = useState('');
-    const [fileMessage, setFileMessage] = useState('');
+    const [cacheMessage, setCacheMessage] = useState<string>('');
+    const [fileMessage, setFileMessage] = useState<string>('');
     const [cacheSize, setCacheSize] = useState<number | null>(null);
     const [cacheContents, setCacheContents] = useState<string[]>([]);
+    const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
+    const [uploadedFilesSize, setUploadedFilesSize] = useState<number | null>(null);
+    const [processedFiles, setProcessedFiles] = useState<ProcessingResult[]>([]);
+    const [processedFilesSize, setProcessedFilesSize] = useState<number | null>(null);
     const [loadingCache, setLoadingCache] = useState<boolean>(false);
+    const [loadingFiles, setLoadingFiles] = useState<boolean>(false);
+    const [loadingProcessed, setLoadingProcessed] = useState<boolean>(false);
 
+    // Fetch Cache Information
     const fetchCacheInfo = async () => {
         setLoadingCache(true);
         try {
@@ -27,8 +38,54 @@ const UsagePage = () => {
         }
     };
 
+    // Fetch Uploaded Files and Their Sizes
+    const fetchUploadedFiles = async () => {
+        setLoadingFiles(true);
+        try {
+            const files = await listFiles();
+            setUploadedFiles(files);
+            // Calculate total uploaded files size
+            let totalSize = 0;
+            for (const filename of files) {
+                const fileInfo = await getFileContent(filename);
+                const size = new Blob([fileInfo.content]).size;
+                totalSize += size;
+            }
+            setUploadedFilesSize(totalSize);
+        } catch (error) {
+            console.error("Failed to fetch uploaded files:", error);
+        } finally {
+            setLoadingFiles(false);
+        }
+    };
+
+    // Fetch Processed Files and Their Sizes
+    const fetchProcessedFiles = async () => {
+        setLoadingProcessed(true);
+        try {
+            const resultsResponse = await getAllResults();
+            const results: ProcessingResult[] = Object.entries(resultsResponse).map(([filename, content]) => ({
+                filename,
+                content,
+            }));
+            setProcessedFiles(results);
+            // Calculate total processed files size
+            let totalSize = 0;
+            results.forEach(result => {
+                totalSize += new Blob([result.content]).size;
+            });
+            setProcessedFilesSize(totalSize);
+        } catch (error) {
+            console.error("Failed to fetch processed files:", error);
+        } finally {
+            setLoadingProcessed(false);
+        }
+    };
+
     useEffect(() => {
         fetchCacheInfo();
+        fetchUploadedFiles();
+        fetchProcessedFiles();
     }, []);
 
     const handleClearCache = async () => {
@@ -45,8 +102,10 @@ const UsagePage = () => {
     const handleClearFiles = async () => {
         try {
             setFileMessage('Clearing files...');
-            const response = await clearAllFiles();
+            const response = await clearFiles();
             setFileMessage(response.message || 'All files cleared successfully.');
+            fetchUploadedFiles(); // Refresh uploaded files
+            fetchProcessedFiles(); // Refresh processed files
         } catch {
             setFileMessage('Failed to clear files.');
         }
@@ -62,8 +121,15 @@ const UsagePage = () => {
                         <h2 className="text-xl font-semibold">File Storage Usage</h2>
                     </CardHeader>
                     <CardContent>
-                        <p>Current CPU usage is at 45%.</p>
-                        <p>Uploaded Files Size: {fileMessage ? fileMessage : 'Loading...'}</p>
+                        <p>Uploaded Files Size: {loadingFiles ? 'Loading...' : `${uploadedFilesSize !== null ? (uploadedFilesSize / (1024)).toFixed(2) : 'N/A'} KB`}</p>
+                        <p>Uploaded Files:</p>
+                        <ul className="list-disc list-inside">
+                            {uploadedFiles.length > 0 ? (
+                                uploadedFiles.map((file, index) => <li key={index}>{file}</li>)
+                            ) : (
+                                <li>No uploaded files.</li>
+                            )}
+                        </ul>
                     </CardContent>
                     <CardFooter>
                         <div className="flex flex-col">
@@ -79,8 +145,7 @@ const UsagePage = () => {
                         <h2 className="text-xl font-semibold">Cache Usage</h2>
                     </CardHeader>
                     <CardContent>
-                        <p>Current Memory usage is at 65%.</p>
-                        <p>Cache Size: {loadingCache ? 'Loading...' : `${cacheSize !== null ? cacheSize : 'N/A'} bytes`}</p>
+                        <p>Cache Size: {loadingCache ? 'Loading...' : `${cacheSize !== null ? (cacheSize / (1024)).toFixed(2) : 'N/A'} KB`}</p>
                         <div className="mt-2">
                             <h3 className="text-md font-medium">Cache Contents:</h3>
                             {loadingCache ? (
@@ -104,16 +169,24 @@ const UsagePage = () => {
                     </CardFooter>
                 </Card>
 
-                {/* Token Usage Card */}
+                {/* Processed Files Usage Card */}
                 <Card>
                     <CardHeader>
-                        <h2 className="text-xl font-semibold">Token Usage</h2>
+                        <h2 className="text-xl font-semibold">Processed Files</h2>
                     </CardHeader>
                     <CardContent>
-                        <p>Current Disk usage is at 70%.</p>
+                        <p>Processed Files Size: {loadingProcessed ? 'Loading...' : `${processedFilesSize !== null ? (processedFilesSize / (1024)).toFixed(2) : 'N/A'} KB`}</p>
+                        <p>Processed Files:</p>
+                        <ul className="list-disc list-inside">
+                            {processedFiles.length > 0 ? (
+                                processedFiles.map((file, index) => <li key={index}>{file.filename}</li>)
+                            ) : (
+                                <li>No processed files.</li>
+                            )}
+                        </ul>
                     </CardContent>
                     <CardFooter>
-                        <p>Updated 2 minutes ago</p>
+                        <p>Updated {new Date().toLocaleTimeString()}</p>
                     </CardFooter>
                 </Card>
             </div>

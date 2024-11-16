@@ -5,7 +5,8 @@ import {
   UploadFilesResponse, 
   UploadedFileInfo, 
   EditFileContentRequest, 
-  ClearFilesResponse 
+  ClearFilesResponse, 
+  GetFilesSizeResponse 
 } from '../types/apiTypes';
 import handleError from '../utils/handleError';
 
@@ -83,6 +84,32 @@ export const clearFiles = async (): Promise<ClearFilesResponse> => {
   try {
     const response = await axiosInstance.delete<ClearFilesResponse>('/files/clear');
     return response.data;
+  } catch (error) {
+    return handleError(error);
+  }
+};
+
+/**
+ * Retrieves the total size of uploaded files in bytes.
+ * @returns {Promise<number>}
+ */
+export const getUploadedFilesSize = async (): Promise<number> => {
+  try {
+    const response = await axiosInstance.get<GetFilesSizeResponse>('/files/size/uploaded');
+    return response.data.uploaded_files_size_bytes || 0;
+  } catch (error) {
+    return handleError(error);
+  }
+};
+
+/**
+ * Retrieves the total size of processed files in bytes.
+ * @returns {Promise<number>}
+ */
+export const getProcessedFilesSize = async (): Promise<number> => {
+  try {
+    const response = await axiosInstance.get<GetFilesSizeResponse>('/files/size/processed');
+    return response.data.processed_files_size_bytes || 0;
   } catch (error) {
     return handleError(error);
   }

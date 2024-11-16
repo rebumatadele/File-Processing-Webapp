@@ -1,3 +1,5 @@
+// src/pages/ProcessingPage.tsx
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -10,7 +12,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Play, RefreshCw, Eye, EyeOff } from 'lucide-react'; // Import Eye icons
+import { Loader2, Play, RefreshCw, Eye, EyeOff } from 'lucide-react';
 import { startProcessing, getTaskStatus } from '@/api/processingUtils';
 import { listPrompts } from '@/api/promptUtils';
 import { ProcessingSettings, TaskStatusResponse } from '@/types/apiTypes';
@@ -48,6 +50,11 @@ export default function ProcessingPage() {
   const [taskStatus, setTaskStatus] = useState<TaskStatusResponse | null>(null);
   const [showApiKey, setShowApiKey] = useState(false); // State to toggle API key visibility
 
+  // Separate state variables for each provider's API key
+  const [openaiApiKey, setOpenaiApiKey] = useState<string>('');
+  const [anthropicApiKey, setAnthropicApiKey] = useState<string>('');
+  const [geminiApiKey, setGeminiApiKey] = useState<string>('');
+
   const { toast } = useToast();
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -63,6 +70,8 @@ export default function ProcessingPage() {
       gemini_api_key: '',
     },
   });
+
+  const providerChoice = form.watch('provider_choice');
 
   useEffect(() => {
     fetchPrompts();
@@ -84,7 +93,17 @@ export default function ProcessingPage() {
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     setIsLoading(true);
     try {
-      // Prepare the payload with only the relevant API key
+      // Determine the relevant API key based on provider_choice
+      let apiKey = '';
+      if (data.provider_choice === 'OpenAI') {
+        apiKey = openaiApiKey;
+      } else if (data.provider_choice === 'Anthropic') {
+        apiKey = anthropicApiKey;
+      } else if (data.provider_choice === 'Gemini') {
+        apiKey = geminiApiKey;
+      }
+
+      // Prepare the payload
       const settings: ProcessingSettings = {
         provider_choice: data.provider_choice,
         prompt: data.prompt,
@@ -92,10 +111,12 @@ export default function ProcessingPage() {
         chunk_by: data.chunk_by,
         selected_model: data.selected_model,
         email: data.email,
-        openai_api_key: data.provider_choice === 'OpenAI' ? data.openai_api_key || '' : '',
-        anthropic_api_key: data.provider_choice === 'Anthropic' ? data.anthropic_api_key || '' : '',
-        gemini_api_key: data.provider_choice === 'Gemini' ? data.gemini_api_key || '' : '',
+        openai_api_key: data.provider_choice === 'OpenAI' ? apiKey : '',
+        anthropic_api_key: data.provider_choice === 'Anthropic' ? apiKey : '',
+        gemini_api_key: data.provider_choice === 'Gemini' ? apiKey : '',
       };
+
+      // Start processing
       const response = await startProcessing(settings);
       setTaskId(response.task_id);
       toast({
@@ -131,8 +152,6 @@ export default function ProcessingPage() {
     }
   };
 
-  const providerChoice = form.watch('provider_choice');
-
   return (
     <div className="container mx-auto py-10">
       <Card className="max-w-4xl mx-auto">
@@ -142,7 +161,6 @@ export default function ProcessingPage() {
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            {/* Remove the nested <form> and use the <Form> as the <form> element */}
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               {/* AI Provider Selection */}
               <FormField
@@ -151,7 +169,7 @@ export default function ProcessingPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>AI Provider</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger className="bg-white border border-gray-300">
                           <SelectValue placeholder="Select an AI provider" />
@@ -199,7 +217,7 @@ export default function ProcessingPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Prompt</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger className="bg-white border border-gray-300">
                           <SelectValue placeholder="Select a prompt" />
@@ -243,7 +261,7 @@ export default function ProcessingPage() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Chunk By</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value}>
                       <FormControl>
                         <SelectTrigger className="bg-white border border-gray-300">
                           <SelectValue placeholder="Select chunking method" />
@@ -275,46 +293,117 @@ export default function ProcessingPage() {
                 )}
               />
 
-              {/* API Key */}
-              <FormField
-                control={form.control}
-                name={
-                  providerChoice === 'OpenAI' 
-                    ? 'openai_api_key' 
-                    : providerChoice === 'Anthropic' 
-                      ? 'anthropic_api_key' 
-                      : 'gemini_api_key'
-                }
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>
-                      {providerChoice === 'OpenAI' && 'OpenAI API Key'}
-                      {providerChoice === 'Anthropic' && 'Anthropic API Key'}
-                      {providerChoice === 'Gemini' && 'Gemini API Key'}
-                    </FormLabel>
-                    <FormControl>
-                      {/* Wrap Input and Button inside a single div */}
-                      <div className="relative">
-                        <Input
-                          {...field}
-                          type={showApiKey ? "text" : "password"}
-                          placeholder={`Enter ${providerChoice} API Key`}
-                          className="pr-10" // Add padding to accommodate the icon
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowApiKey(!showApiKey)}
-                          className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 focus:outline-none"
-                          aria-label="Toggle API Key Visibility"
-                        >
-                          {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                        </button>
-                      </div>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              {/* API Key Inputs */}
+              {/* OpenAI API Key */}
+              {providerChoice === 'OpenAI' && (
+                <FormField
+                  control={form.control}
+                  name="openai_api_key"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>OpenAI API Key</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Input
+                            {...field}
+                            type={showApiKey ? "text" : "password"}
+                            placeholder="Enter OpenAI API Key"
+                            value={openaiApiKey}
+                            onChange={(e) => {
+                              setOpenaiApiKey(e.target.value);
+                              field.onChange(e.target.value);
+                            }}
+                            className="pr-10"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 focus:outline-none"
+                            aria-label="Toggle API Key Visibility"
+                          >
+                            {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                          </button>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {/* Anthropic API Key */}
+              {providerChoice === 'Anthropic' && (
+                <FormField
+                  control={form.control}
+                  name="anthropic_api_key"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Anthropic API Key</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Input
+                            {...field}
+                            type={showApiKey ? "text" : "password"}
+                            placeholder="Enter Anthropic API Key"
+                            value={anthropicApiKey}
+                            onChange={(e) => {
+                              setAnthropicApiKey(e.target.value);
+                              field.onChange(e.target.value);
+                            }}
+                            className="pr-10"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 focus:outline-none"
+                            aria-label="Toggle API Key Visibility"
+                          >
+                            {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                          </button>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {/* Gemini API Key */}
+              {providerChoice === 'Gemini' && (
+                <FormField
+                  control={form.control}
+                  name="gemini_api_key"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Gemini API Key</FormLabel>
+                      <FormControl>
+                        <div className="relative">
+                          <Input
+                            {...field}
+                            type={showApiKey ? "text" : "password"}
+                            placeholder="Enter Gemini API Key"
+                            value={geminiApiKey}
+                            onChange={(e) => {
+                              setGeminiApiKey(e.target.value);
+                              field.onChange(e.target.value);
+                            }}
+                            className="pr-10"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 focus:outline-none"
+                            aria-label="Toggle API Key Visibility"
+                          >
+                            {showApiKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                          </button>
+                        </div>
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               {/* Submit Button */}
               <Button type="submit" disabled={isLoading}>
