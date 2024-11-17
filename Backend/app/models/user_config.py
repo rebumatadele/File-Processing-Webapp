@@ -1,10 +1,17 @@
 # app/models/user_config.py
 
-from pydantic import BaseModel, Field, EmailStr
-from typing import Optional
+from sqlalchemy import Column, String, ForeignKey
+from sqlalchemy.orm import relationship
+from app.config.database import Base
+import uuid
 
-class UserConfig(BaseModel):
-    user_id: str = Field(..., example="user_12345")
-    openai_api_key: Optional[str] = Field(None, example="sk-...")
-    anthropic_api_key: Optional[str] = Field(None, example="anthropic-api-key")
-    gemini_api_key: Optional[str] = Field(None, example="gemini-api-key")
+class UserConfig(Base):
+    __tablename__ = "user_configs"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), unique=True, nullable=False)
+    openai_api_key = Column(String, nullable=True)
+    anthropic_api_key = Column(String, nullable=True)
+    gemini_api_key = Column(String, nullable=True)
+
+    user = relationship("User", back_populates="config")

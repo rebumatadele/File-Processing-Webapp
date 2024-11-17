@@ -1,0 +1,6 @@
+[2024-11-17 23:38:46] - FileNotFound: Prompt 'Default Prompt' not found.
+[2024-11-17 23:38:46] - FileNotFound: Prompt 'Default Prompt' not found.
+[2024-11-17 23:41:23] - FileNotFound: Prompt 'Default Prompt' not found.
+[2024-11-17 23:41:23] - FileNotFound: Prompt 'Default Prompt' not found.
+[2024-11-17 23:41:46] - FileNotFound: Prompt 'Default Prompt' not found.
+[2024-11-17 23:42:04] - FileNotFound: Prompt 'Default Prompt' not found.

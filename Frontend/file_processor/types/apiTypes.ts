@@ -107,3 +107,36 @@ export interface GetFilesSizeResponse {
   uploaded_files_size_bytes?: number;
   processed_files_size_bytes?: number;
 }
+
+export interface StartBatchProcessingRequest {
+  prompt: string;
+  chunk_size: number;
+  chunk_by: 'word' | 'character';
+  selected_model: string;
+  email?: string;
+  anthropic_api_key?: string;
+}
+
+export interface StartBatchProcessingResponse {
+  batch_id: string;
+  message: string;
+}
+
+export interface BatchStatusResponse {
+  batch_id: string;
+  processing_status: string;
+  request_counts: Record<string, number>;
+  created_at?: string;
+  ended_at?: string;
+  expires_at?: string;
+  results_url?: string;
+}
+
+export interface CancelBatchResponse {
+  batch_id: string;
+  message: string;
+}
+
+export interface BatchListResponse {
+  [batch_id: string]: BatchStatusResponse;
+}

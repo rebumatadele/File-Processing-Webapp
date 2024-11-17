@@ -2,9 +2,15 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import config, errors, cache, prompts, files, processing, results, claude_batch
+from fastapi.security import OAuth2PasswordBearer
+from app.routers import (
+    auth_router, config, errors, cache, prompts, files, processing, results, claude_batch
+)
 from app.utils.environment import load_environment_variables
 from dotenv import load_dotenv
+from app.config.database import engine, Base
+from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
+from fastapi.openapi.models import OAuth2 as OAuth2Model
 
 # Load environment variables at the very start
 load_environment_variables()
@@ -44,7 +50,28 @@ app.include_router(claude_batch.router)
 app.include_router(results.router)
 app.include_router(errors.router)
 app.include_router(cache.router)
+app.include_router(auth_router.router)
 
 @app.get("/", summary="Root Endpoint")
 def read_root():
     return {"message": "Welcome to the Text Processor with Generative AI!"}
+
+# Define a custom OAuth2 schema for Swagger UI
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+@app.on_event("startup")
+async def startup_event():
+    # Create all tables
+    Base.metadata.create_all(bind=engine)
+    print("Database tables created successfully.")
+
+    # Customize OpenAPI schema for Swagger UI
+    if not app.openapi_schema:
+        openapi_schema = app.openapi()
+        # Update security scheme to require only the token
+        openapi_schema["components"]["securitySchemes"]["OAuth2PasswordBearer"] = {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT",  # Indicate you're using a JWT token
+        }
+        app.openapi_schema = openapi_schema

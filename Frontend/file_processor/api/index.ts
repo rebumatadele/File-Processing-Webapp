@@ -7,3 +7,4 @@ export * from './fileUtils';
 export * from './processingUtils';
 export * from './promptUtils';
 export * from './resultsUtils';
+export * from './claudeBatchUtils'; // Add this line

@@ -12,6 +12,7 @@ const steps = [
   { name: "Prompt Management", href: "/prompt-management", icon: MessageSquare, description: "Manage and customize AI prompts" },
   { name: "File Management", href: "/file-management", icon: FolderOpen, description: "Upload and organize your files" },
   { name: "Processing", href: "/processing", icon: Play, description: "Run AI processing on your files" },
+  { name: "Batch Processing", href: "/claude_batch_processing", icon: Play, description: "Run Batch Claude AI processing on your files" },
   { name: "Results", href: "/results", icon: FileText, description: "View and analyze processed results" },
 ]
 

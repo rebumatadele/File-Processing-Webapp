@@ -20,22 +20,39 @@ PROCESSED_DIR = BASE_DIR / "storage" / "processed"
 CONFIG_DIR = BASE_DIR / "config"
 USER_CONFIG_FILE = CONFIG_DIR / "user_configs.json"
 
-BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Adjust as per directory structure
 CACHE_DIR = BASE_DIR / "cache"
-
-# Ensuring CACHE_DIR exists
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
-def handle_error(error_type: str, message: str):
+def get_user_prompts_dir(user_id: str) -> Path:
+    return BASE_DIR / "prompts" / user_id
+
+def get_user_upload_dir(user_id: str) -> Path:
+    return BASE_DIR / "storage" / "uploads" / user_id
+
+def get_user_processed_dir(user_id: str) -> Path:
+    return BASE_DIR / "storage" / "processed" / user_id
+
+def get_user_cache_dir(user_id: str) -> Path:
+    return CACHE_DIR / user_id
+
+def get_user_error_log_path(user_id: str) -> Path:
+    return BASE_DIR / "logs" / f"{user_id}_error_log.txt"
+
+def handle_error(error_type: str, message: str, user_id: Optional[str] = None):
     """
-    Logs errors to a file with a timestamp.
+    Logs errors to a file with a timestamp. If user_id is provided, logs are stored per user.
     """
     timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
     formatted_error = f"[{timestamp}] - {error_type}: {message}\n"
 
-    ERROR_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if user_id:
+        error_log_path = get_user_error_log_path(user_id)
+    else:
+        error_log_path = BASE_DIR / "logs" / "error_log.txt"
+
+    error_log_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        with open(ERROR_LOG_PATH, "a") as log_file:
+        with open(error_log_path, "a") as log_file:
             log_file.write(formatted_error)
     except OSError as e:
         # If logging fails, print to console
@@ -47,234 +64,236 @@ def sanitize_file_name(file_name: str) -> str:
     """
     return re.sub(r'[<>:"/\\|?*\r\n]+', '_', file_name)
 
-def list_saved_prompts() -> list:
+def list_saved_prompts(user_id: str) -> list:
     """
-    Lists all saved prompts in the prompts directory.
+    Lists all saved prompts for the user.
     """
     try:
-        PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
-        prompts = [f.stem for f in PROMPTS_DIR.glob('*.txt')]
+        prompts_dir = get_user_prompts_dir(user_id)
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+        prompts = [f.stem for f in prompts_dir.glob('*.txt')]
         return prompts
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to list saved prompts: {e}")
+        handle_error("ProcessingError", f"Failed to list saved prompts: {e}", user_id=user_id)
         return []
 
-def load_prompt(name: str = "Default Prompt") -> str:
+def load_prompt(name: str, user_id: str) -> str:
     """
-    Loads a prompt by name.
+    Loads a prompt by name for the user.
     """
     try:
-        PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
-        file_path = PROMPTS_DIR / f"{sanitize_file_name(name)}.txt"
+        prompts_dir = get_user_prompts_dir(user_id)
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+        file_path = prompts_dir / f"{sanitize_file_name(name)}.txt"
         with file_path.open('r', encoding='utf-8') as file:
             return file.read()
     except FileNotFoundError:
-        handle_error("FileNotFound", f"Prompt '{name}' not found.")
+        handle_error("FileNotFound", f"Prompt '{name}' not found.", user_id=user_id)
         return ""
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to load prompt '{name}': {e}")
+        handle_error("ProcessingError", f"Failed to load prompt '{name}': {e}", user_id=user_id)
         return ""
 
-def save_prompt(name: str, content: str):
+def save_prompt(name: str, content: str, user_id: str):
     """
-    Saves a prompt with the given name and content.
+    Saves a prompt with the given name and content for the user.
     """
     try:
-        PROMPTS_DIR.mkdir(parents=True, exist_ok=True)
-        file_path = PROMPTS_DIR / f"{sanitize_file_name(name)}.txt"
+        prompts_dir = get_user_prompts_dir(user_id)
+        prompts_dir.mkdir(parents=True, exist_ok=True)
+        file_path = prompts_dir / f"{sanitize_file_name(name)}.txt"
         with file_path.open('w', encoding='utf-8') as file:
             file.write(content)
     except OSError as e:
         if e.errno == errno.ENOSPC:
-            handle_error("StorageError", "No space left on device. Unable to save the prompt.")
+            handle_error("StorageError", "No space left on device. Unable to save the prompt.", user_id=user_id)
         else:
-            handle_error("ProcessingError", f"Failed to save prompt '{name}': {e}")
+            handle_error("ProcessingError", f"Failed to save prompt '{name}': {e}", user_id=user_id)
 
-def delete_prompt(name: str):
+def delete_prompt(name: str, user_id: str):
     """
-    Deletes a prompt by name.
+    Deletes a prompt by name for the user.
     """
     try:
-        file_path = PROMPTS_DIR / f"{sanitize_file_name(name)}.txt"
+        prompts_dir = get_user_prompts_dir(user_id)
+        file_path = prompts_dir / f"{sanitize_file_name(name)}.txt"
         if file_path.exists():
             file_path.unlink()
         else:
-            handle_error("FileNotFound", f"Prompt '{name}' does not exist.")
+            handle_error("FileNotFound", f"Prompt '{name}' does not exist.", user_id=user_id)
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to delete prompt '{name}': {e}")
+        handle_error("ProcessingError", f"Failed to delete prompt '{name}': {e}", user_id=user_id)
 
-def clear_error_logs():
+def clear_error_logs(user_id: str):
     """
-    Clears the error logs by overwriting the log file with empty content.
+    Clears the error logs for the user.
     """
     try:
-        if ERROR_LOG_PATH.exists():
-            with ERROR_LOG_PATH.open("w") as log_file:
+        error_log_path = get_user_error_log_path(user_id)
+        if error_log_path.exists():
+            with error_log_path.open("w") as log_file:
                 log_file.write("")
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to clear error logs: {e}")
+        handle_error("ProcessingError", f"Failed to clear error logs: {e}", user_id=user_id)
 
-def rotate_logs(max_size: int = 10*1024*1024):
+def list_errors(user_id: str) -> list:
     """
-    Rotates the log file if it exceeds max_size.
-    """
-    if ERROR_LOG_PATH.exists() and ERROR_LOG_PATH.stat().st_size > max_size:
-        timestamp = time.strftime('%Y%m%d_%H%M%S')
-        archived_log = BASE_DIR / f"logs/error_log_{timestamp}.bak"
-        try:
-            shutil.move(str(ERROR_LOG_PATH), str(archived_log))
-            # Create a new empty log file
-            with ERROR_LOG_PATH.open("w") as log_file:
-                log_file.write("")
-        except OSError as e:
-            handle_error("ProcessingError", f"Failed to rotate logs: {e}")
-
-def list_errors() -> list:
-    """
-    Retrieves the list of error logs.
+    Retrieves the list of error logs for the user.
     """
     try:
-        if not ERROR_LOG_PATH.exists():
+        error_log_path = get_user_error_log_path(user_id)
+        if not error_log_path.exists():
             return []
-        with ERROR_LOG_PATH.open("r", encoding='utf-8') as log_file:
+        with error_log_path.open("r", encoding='utf-8') as log_file:
             return log_file.readlines()
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to read error logs: {e}")
+        handle_error("ProcessingError", f"Failed to read error logs: {e}", user_id=user_id)
         return []
 
-def clear_cache():
+def clear_cache(user_id: str):
     """
-    Clears the application cache by deleting all files in the cache directory.
+    Clears the application cache for the user.
     """
     try:
-        if CACHE_DIR.exists():
-            shutil.rmtree(CACHE_DIR)
-            CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        user_cache_dir = get_user_cache_dir(user_id)
+        if user_cache_dir.exists():
+            shutil.rmtree(user_cache_dir)
+            user_cache_dir.mkdir(parents=True, exist_ok=True)
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to clear cache: {e}")
+        handle_error("ProcessingError", f"Failed to clear cache: {e}", user_id=user_id)
 
-def save_uploaded_file(filename: str, content: str):
+def save_uploaded_file(filename: str, content: str, user_id: str):
     """
-    Saves an uploaded file to the storage directory.
+    Saves an uploaded file to the user's storage directory.
     """
     try:
-        UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-        file_path = UPLOAD_DIR / sanitize_file_name(filename)
+        user_upload_dir = get_user_upload_dir(user_id)
+        user_upload_dir.mkdir(parents=True, exist_ok=True)
+        file_path = user_upload_dir / sanitize_file_name(filename)
         with file_path.open('w', encoding='utf-8') as file:
             file.write(content)
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to save uploaded file '{filename}': {e}")
+        handle_error("ProcessingError", f"Failed to save uploaded file '{filename}': {e}", user_id=user_id)
 
-def get_uploaded_files() -> list:
+def get_uploaded_files(user_id: str) -> list:
     """
-    Lists all uploaded files.
+    Lists all uploaded files for the user.
     """
     try:
-        if not UPLOAD_DIR.exists():
+        user_upload_dir = get_user_upload_dir(user_id)
+        if not user_upload_dir.exists():
             return []
-        return [f.name for f in UPLOAD_DIR.iterdir() if f.is_file()]
+        return [f.name for f in user_upload_dir.iterdir() if f.is_file()]
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to list uploaded files: {e}")
+        handle_error("ProcessingError", f"Failed to list uploaded files: {e}", user_id=user_id)
         return []
 
-def load_uploaded_file_content(filename: str) -> str:
+def load_uploaded_file_content(filename: str, user_id: str) -> str:
     """
-    Loads the content of an uploaded file.
+    Loads the content of an uploaded file for the user.
     """
     try:
-        file_path = UPLOAD_DIR / sanitize_file_name(filename)
+        user_upload_dir = get_user_upload_dir(user_id)
+        file_path = user_upload_dir / sanitize_file_name(filename)
         print(f"Attempting to load file: {file_path}")  # Debug log
         with file_path.open('r', encoding='utf-8') as file:
             return file.read()
     except FileNotFoundError:
-        handle_error("FileNotFound", f"Uploaded file '{filename}' not found.")
+        handle_error("FileNotFound", f"Uploaded file '{filename}' not found.", user_id=user_id)
         return ""
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to load uploaded file '{filename}': {e}")
+        handle_error("ProcessingError", f"Failed to load uploaded file '{filename}': {e}", user_id=user_id)
         return ""
 
-def update_file_content(filename: str, new_content: str):
+def update_file_content(filename: str, new_content: str, user_id: str):
     """
-    Updates the content of an uploaded file.
+    Updates the content of an uploaded file for the user.
     """
     try:
-        file_path = UPLOAD_DIR / sanitize_file_name(filename)
+        user_upload_dir = get_user_upload_dir(user_id)
+        file_path = user_upload_dir / sanitize_file_name(filename)
         if not file_path.exists():
-            handle_error("FileNotFound", f"Uploaded file '{filename}' does not exist.")
+            handle_error("FileNotFound", f"Uploaded file '{filename}' does not exist.", user_id=user_id)
             return
         with file_path.open('w', encoding='utf-8') as file:
             file.write(new_content)
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to update uploaded file '{filename}': {e}")
+        handle_error("ProcessingError", f"Failed to update uploaded file '{filename}': {e}", user_id=user_id)
 
-def delete_all_files():
+def delete_all_files(user_id: str):
     """
-    Deletes all uploaded and processed files.
+    Deletes all uploaded and processed files for the user.
     """
     try:
-        if UPLOAD_DIR.exists():
-            shutil.rmtree(UPLOAD_DIR)
-        if PROCESSED_DIR.exists():
-            shutil.rmtree(PROCESSED_DIR)
+        user_upload_dir = get_user_upload_dir(user_id)
+        user_processed_dir = get_user_processed_dir(user_id)
+        if user_upload_dir.exists():
+            shutil.rmtree(user_upload_dir)
+        if user_processed_dir.exists():
+            shutil.rmtree(user_processed_dir)
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to delete all files: {e}")
+        handle_error("ProcessingError", f"Failed to delete all files: {e}", user_id=user_id)
 
-def save_processed_result(filename: str, content: str):
+def save_processed_result(filename: str, content: str, user_id: str):
     """
-    Saves the processed result of a file.
+    Saves the processed result of a file for the user.
     """
     try:
-        PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-        file_path = PROCESSED_DIR / sanitize_file_name(filename)
+        user_processed_dir = get_user_processed_dir(user_id)
+        user_processed_dir.mkdir(parents=True, exist_ok=True)
+        file_path = user_processed_dir / sanitize_file_name(filename)
         with file_path.open('w', encoding='utf-8') as file:
             file.write(content)
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to save processed result for '{filename}': {e}")
+        handle_error("ProcessingError", f"Failed to save processed result for '{filename}': {e}", user_id=user_id)
 
-def get_processed_results() -> dict:
+def get_processed_results(user_id: str) -> dict:
     """
-    Retrieves all processed results.
+    Retrieves all processed results for the user.
     """
     results = {}
     try:
-        if not PROCESSED_DIR.exists():
+        user_processed_dir = get_user_processed_dir(user_id)
+        if not user_processed_dir.exists():
             return results
-        for file in PROCESSED_DIR.iterdir():
+        for file in user_processed_dir.iterdir():
             if file.is_file():
                 with file.open('r', encoding='utf-8') as f:
                     results[file.name] = f.read()
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to retrieve processed results: {e}")
+        handle_error("ProcessingError", f"Failed to retrieve processed results: {e}", user_id=user_id)
     return results
 
-def get_uploaded_files_size() -> int:
+def get_uploaded_files_size(user_id: str) -> int:
     """
-    Calculates the total size of all uploaded files in bytes.
+    Calculates the total size of all uploaded files in bytes for the user.
     """
     total_size = 0
     try:
-        if not UPLOAD_DIR.exists():
+        user_upload_dir = get_user_upload_dir(user_id)
+        if not user_upload_dir.exists():
             return total_size
-        for file in UPLOAD_DIR.iterdir():
+        for file in user_upload_dir.iterdir():
             if file.is_file():
                 total_size += file.stat().st_size
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to calculate uploaded files size: {e}")
+        handle_error("ProcessingError", f"Failed to calculate uploaded files size: {e}", user_id=user_id)
     return total_size
 
-def get_processed_files_size() -> int:
+def get_processed_files_size(user_id: str) -> int:
     """
-    Calculates the total size of all processed files in bytes.
+    Calculates the total size of all processed files in bytes for the user.
     """
     total_size = 0
     try:
-        if not PROCESSED_DIR.exists():
+        user_processed_dir = get_user_processed_dir(user_id)
+        if not user_processed_dir.exists():
             return total_size
-        for file in PROCESSED_DIR.iterdir():
+        for file in user_processed_dir.iterdir():
             if file.is_file():
                 total_size += file.stat().st_size
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to calculate processed files size: {e}")
+        handle_error("ProcessingError", f"Failed to calculate processed files size: {e}", user_id=user_id)
     return total_size
 
 def save_user_config(user_id: str, config: dict):
@@ -292,7 +311,7 @@ def save_user_config(user_id: str, config: dict):
         with USER_CONFIG_FILE.open('w', encoding='utf-8') as f:
             json.dump(data, f, indent=4)
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to save user config for {user_id}: {e}")
+        handle_error("ProcessingError", f"Failed to save user config for {user_id}: {e}", user_id=user_id)
 
 def get_user_config(user_id: str) -> Optional[dict]:
     """
@@ -305,49 +324,49 @@ def get_user_config(user_id: str) -> Optional[dict]:
             data = json.load(f)
         return data.get(user_id)
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to retrieve user config for {user_id}: {e}")
+        handle_error("ProcessingError", f"Failed to retrieve user config for {user_id}: {e}", user_id=user_id)
         return None
-    
-    
 
 # Cache-related functions
 
-def generate_cache_key(chunk: str, provider_choice: str, model_choice: Optional[str] = None) -> str:
+def generate_cache_key(chunk: str, provider_choice: str, model_choice: Optional[str], user_id: str) -> str:
     """
-    Generates a SHA256 hash key based on the chunk content and configuration.
+    Generates a SHA256 hash key based on the chunk content, configuration, and user_id.
     """
-    key_string = f"{provider_choice}:{model_choice}:{chunk}"
+    key_string = f"{user_id}:{provider_choice}:{model_choice}:{chunk}"
     return hashlib.sha256(key_string.encode('utf-8')).hexdigest()
 
-def get_cache_file_path(cache_key: str) -> Path:
+def get_cache_file_path(cache_key: str, user_id: str) -> Path:
     """
-    Returns the file path for a given cache key.
+    Returns the file path for a given cache key for the user.
     """
-    return CACHE_DIR / f"{cache_key}.json"
+    user_cache_dir = get_user_cache_dir(user_id)
+    user_cache_dir.mkdir(parents=True, exist_ok=True)
+    return user_cache_dir / f"{cache_key}.json"
 
-def get_cached_result(chunk: str, provider_choice: str, model_choice: Optional[str] = None) -> Optional[str]:
+def get_cached_result(chunk: str, provider_choice: str, model_choice: Optional[str], user_id: str) -> Optional[str]:
     """
-    Retrieves the cached result for a given chunk and configuration.
+    Retrieves the cached result for a given chunk and configuration for the user.
     Returns None if not found.
     """
-    cache_key = generate_cache_key(chunk, provider_choice, model_choice)
-    cache_file = get_cache_file_path(cache_key)
+    cache_key = generate_cache_key(chunk, provider_choice, model_choice, user_id)
+    cache_file = get_cache_file_path(cache_key, user_id)
     if cache_file.exists():
         try:
             with cache_file.open('r', encoding='utf-8') as f:
                 data = json.load(f)
                 return data.get("result")
         except (OSError, json.JSONDecodeError) as e:
-            handle_error("CacheError", f"Failed to read cache file {cache_file}: {e}")
+            handle_error("CacheError", f"Failed to read cache file {cache_file}: {e}", user_id=user_id)
             return None
     return None
 
-def set_cached_result(chunk: str, provider_choice: str, model_choice: Optional[str], result: str):
+def set_cached_result(chunk: str, provider_choice: str, model_choice: Optional[str], result: str, user_id: str):
     """
-    Caches the result for a given chunk and configuration.
+    Caches the result for a given chunk and configuration for the user.
     """
-    cache_key = generate_cache_key(chunk, provider_choice, model_choice)
-    cache_file = get_cache_file_path(cache_key)
+    cache_key = generate_cache_key(chunk, provider_choice, model_choice, user_id)
+    cache_file = get_cache_file_path(cache_key, user_id)
     data = {
         "chunk": chunk,
         "provider_choice": provider_choice,
@@ -359,33 +378,35 @@ def set_cached_result(chunk: str, provider_choice: str, model_choice: Optional[s
         with cache_file.open('w', encoding='utf-8') as f:
             json.dump(data, f)
     except OSError as e:
-        handle_error("CacheError", f"Failed to write cache file {cache_file}: {e}")
+        handle_error("CacheError", f"Failed to write cache file {cache_file}: {e}", user_id=user_id)
 
-def get_cache_size() -> int:
+def get_cache_size(user_id: str) -> int:
     """
-    Calculates the total size of the cache in bytes.
+    Calculates the total size of the cache in bytes for the user.
     """
     total_size = 0
     try:
-        if not CACHE_DIR.exists():
+        user_cache_dir = get_user_cache_dir(user_id)
+        if not user_cache_dir.exists():
             return total_size
-        for dirpath, dirnames, filenames in os.walk(CACHE_DIR):
+        for dirpath, dirnames, filenames in os.walk(user_cache_dir):
             for f in filenames:
                 fp = os.path.join(dirpath, f)
                 if os.path.isfile(fp):
                     total_size += os.path.getsize(fp)
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to calculate cache size: {e}")
+        handle_error("ProcessingError", f"Failed to calculate cache size: {e}", user_id=user_id)
     return total_size
 
-def list_cache_contents() -> list:
+def list_cache_contents(user_id: str) -> list:
     """
-    Lists all files in the cache directory.
+    Lists all files in the cache directory for the user.
     """
     try:
-        if not CACHE_DIR.exists():
+        user_cache_dir = get_user_cache_dir(user_id)
+        if not user_cache_dir.exists():
             return []
-        return [f.name for f in CACHE_DIR.iterdir() if f.is_file()]
+        return [f.name for f in user_cache_dir.iterdir() if f.is_file()]
     except OSError as e:
-        handle_error("ProcessingError", f"Failed to list cache contents: {e}")
+        handle_error("ProcessingError", f"Failed to list cache contents: {e}", user_id=user_id)
         return []

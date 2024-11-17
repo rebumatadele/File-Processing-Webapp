@@ -19,7 +19,8 @@ async def process_text_stream(
     chunk_size: int,
     chunk_by: str,
     model_choice: Optional[str],
-    api_keys: Dict[str, str]
+    api_keys: Dict[str, str],
+    user_id: str
 ) -> List[str]:
     """
     Processes the text by chunking and sending each chunk to the selected AI provider.
@@ -33,6 +34,7 @@ async def process_text_stream(
         chunk_by (str): The method to chunk text ('word', 'character').
         model_choice (Optional[str]): The specific model to use.
         api_keys (Dict[str, str]): Dictionary containing API keys.
+        user_id (str): The ID of the user.
     
     Returns:
         List[str]: List of responses from the AI provider or cache.
@@ -49,7 +51,7 @@ async def process_text_stream(
 
     for chunk in chunks:
         # Check cache
-        cached = get_cached_result(chunk, provider_choice, model_choice)
+        cached = get_cached_result(chunk, provider_choice, model_choice, user_id=user_id)
         if cached:
             responses.append(cached)
             continue  # Skip processing this chunk
@@ -77,8 +79,8 @@ async def process_text_stream(
 
         # Cache the result
         try:
-            set_cached_result(chunk, provider_choice, model_choice, response)
+            set_cached_result(chunk, provider_choice, model_choice, response, user_id=user_id)
         except Exception as e:
-            handle_error("CacheError", f"Failed to cache result for chunk: {e}")
+            handle_error("CacheError", f"Failed to cache result for chunk: {e}", user_id=user_id)
 
     return responses

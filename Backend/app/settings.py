@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     mail_ssl: Optional[bool] = Field(True, description="Enable SSL for the mail server")
 
     # Additional settings can be added here
+    secret_key: str = "qwertyuioplkjhgfdsazxcvbnm"  # Use a strong, unique key
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
+    database_url: str = "sqlite:///./test.db"  # Example for SQLite
 
     model_config = {
         "env_file": ".env",  # Specifies the .env file location

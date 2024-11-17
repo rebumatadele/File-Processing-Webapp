@@ -1,0 +1,31 @@
+[2024-11-17 23:38:46] - ProcessingError: Failed to load prompt: 404: Prompt not found.
+[2024-11-17 23:38:46] - ProcessingError: Failed to load prompt: 404: Prompt not found.
+[2024-11-17 23:41:23] - ProcessingError: Failed to load prompt: 404: Prompt not found.
+[2024-11-17 23:41:23] - ProcessingError: Failed to load prompt: 404: Prompt not found.
+[2024-11-17 23:41:46] - ProcessingError: Failed to load prompt: 404: Prompt not found.
+[2024-11-17 23:42:04] - ProcessingError: Failed to load prompt: 404: Prompt not found.
+[2024-11-17 23:44:56] - ProcessingError: Failed to load prompt: 404: Prompt not found.
+[2024-11-17 23:44:56] - ProcessingError: Failed to load prompt: 404: Prompt not found.
+[2024-11-17 23:47:57] - ProcessingError: Failed to load prompt: 404: Prompt not found.
+[2024-11-17 23:48:24] - ProcessingError: Failed to retrieve file: 3 validation errors for UploadedFileSchema
+id
+  Field required [type=missing, input_value={'filename': 'my text.txt...y before that fought. "}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.9/v/missing
+user_id
+  Field required [type=missing, input_value={'filename': 'my text.txt...y before that fought. "}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.9/v/missing
+uploaded_at
+  Field required [type=missing, input_value={'filename': 'my text.txt...y before that fought. "}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.9/v/missing
+[2024-11-17 23:48:28] - ProcessingError: Failed to retrieve file: 3 validation errors for UploadedFileSchema
+id
+  Field required [type=missing, input_value={'filename': 'my text.txt...y before that fought. "}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.9/v/missing
+user_id
+  Field required [type=missing, input_value={'filename': 'my text.txt...y before that fought. "}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.9/v/missing
+uploaded_at
+  Field required [type=missing, input_value={'filename': 'my text.txt...y before that fought. "}, input_type=dict]
+    For further information visit https://errors.pydantic.dev/2.9/v/missing
+[2024-11-17 23:48:58] - ProcessingError: Failed to load prompt: 404: Prompt not found.
+[2024-11-17 23:48:58] - ProcessingError: Failed to load prompt: 404: Prompt not found.

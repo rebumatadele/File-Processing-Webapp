@@ -1,17 +1,25 @@
 # app/models/processing.py
 
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Text
+from sqlalchemy.orm import relationship
+from app.config.database import Base
+import uuid
+from datetime import datetime
 
-class ProcessingSettings(BaseModel):
-    provider_choice: str = Field(..., description="Choice of AI provider (e.g., 'openai', 'anthropic', 'gemini')")
-    prompt: str = Field(..., description="Prompt to send to the AI model")
-    chunk_size: Optional[int] = Field(1024, description="Size of text chunks")
-    chunk_by: Optional[str] = Field("word", description="Method to chunk text ('word', 'character')")
-    selected_model: Optional[str] = Field(None, description="Specific model choice if applicable")
-    email: EmailStr = Field(..., description="Email address to send the processed files to")
-    
-    # User-provided API keys
-    openai_api_key: Optional[str] = Field(None, description="User's OpenAI API Key")
-    anthropic_api_key: Optional[str] = Field(None, description="User's Anthropic API Key")
-    gemini_api_key: Optional[str] = Field(None, description="User's Gemini API Key")
+class ProcessingJob(Base):
+    __tablename__ = "processing_jobs"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    provider_choice = Column(String, nullable=False)
+    prompt = Column(Text, nullable=False)
+    chunk_size = Column(Integer, default=1024)
+    chunk_by = Column(String, default="word")
+    selected_model = Column(String, nullable=True)
+    email = Column(String, nullable=False)
+    status = Column(String, default="pending")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    user = relationship("User", back_populates="processing_jobs")
+    results = relationship("ProcessingResult", back_populates="job", cascade="all, delete-orphan")

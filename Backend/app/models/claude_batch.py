@@ -1,31 +1,39 @@
 # app/models/claude_batch.py
 
-from typing import List, Optional
-from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, JSON
+from sqlalchemy.orm import relationship
+from app.config.database import Base
+import uuid
+from datetime import datetime
 
-class BatchRequestItem(BaseModel):
-    custom_id: str = Field(..., description="Unique identifier for the request")
-    params: dict = Field(..., description="Parameters for the Messages API")
+class Batch(Base):
+    __tablename__ = "batches"
 
-class StartBatchProcessingRequest(BaseModel):
-    prompt: str = Field(..., description="Prompt to send to Claude")
-    chunk_size: int = Field(..., description="Size of text chunks")
-    chunk_by: str = Field(..., description="Method to chunk text ('word' , 'sentence' , Character)")
-    selected_model: str = Field(..., description="Specific Claude model to use")  # Renamed field
-    email: Optional[EmailStr] = Field(None, description="Email address to send the processed files to")
-    
-    # User-provided API keys (optional)
-    anthropic_api_key: Optional[str] = Field(None, description="User's Anthropic API Key")
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    external_batch_id = Column(String, unique=True, nullable=True)
+    prompt = Column(String, nullable=False)
+    chunk_size = Column(Integer, nullable=False)
+    chunk_by = Column(String, nullable=False)
+    selected_model = Column(String, nullable=False)
+    email = Column(String, nullable=True)
+    status = Column(String, default="pending")
+    request_counts = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    ended_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+    results_url = Column(String, nullable=True)
 
-class StartBatchProcessingResponse(BaseModel):
-    batch_id: str = Field(..., description="Unique identifier for the batch")
-    message: str = Field(..., description="Status message")
+    user = relationship("User", back_populates="batches")
+    items = relationship("BatchRequestItem", back_populates="batch", cascade="all, delete-orphan")
 
-class BatchStatusResponse(BaseModel):
-    batch_id: str = Field(..., description="Unique identifier for the batch")
-    processing_status: str = Field(..., description="Current processing status of the batch")
-    request_counts: dict = Field(..., description="Counts of request statuses within the batch")
-    created_at: Optional[str] = Field(None, description="Batch creation timestamp")
-    ended_at: Optional[str] = Field(None, description="Batch completion timestamp")
-    expires_at: Optional[str] = Field(None, description="Batch expiration timestamp")
-    results_url: Optional[str] = Field(None, description="URL to fetch batch results")
+class BatchRequestItem(Base):
+    __tablename__ = "batch_request_items"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    batch_id = Column(String, ForeignKey("batches.id"), nullable=False)
+    custom_id = Column(String, nullable=False)
+    params = Column(JSON, nullable=False)
+    result = Column(String, nullable=True)
+
+    batch = relationship("Batch", back_populates="items")
