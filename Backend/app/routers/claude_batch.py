@@ -77,21 +77,29 @@ async def start_batch_processing(
                 handle_error("InvalidChunkBy", "chunk_by must be 'word' or 'character'.")
                 raise HTTPException(status_code=400, detail="chunk_by must be 'word' or 'character'.")
 
+            # Function to sanitize the file name (replace invalid characters)
+            def sanitize_file_name(file_name):
+                # Replace all invalid characters (anything not a-z, A-Z, 0-9, _, or -)
+                sanitized = re.sub(r'[^a-zA-Z0-9_-]', '_', file_name)
+                return sanitized
+
             # Create batch request items
             for idx, chunk in enumerate(chunks):
-                # Sanitize file name
-                valid_file_name = re.sub(r'[^a-zA-Z0-9_-]', '_', file_name)
+                # Sanitize file name (replace spaces and other invalid characters)
+                valid_file_name = sanitize_file_name(file_name)
 
-                # Truncate file name if necessary
-                max_file_name_length = 64 - len("_chunk_0_" + secrets.token_hex(4))
+                # Truncate file name to fit within 64 characters limit (taking index into account)
+                max_file_name_length = 64 - len(f"_{idx}")  # Only leave space for the index at the end
                 truncated_file_name = valid_file_name[:max_file_name_length]
 
-                # Generate custom_id
-                custom_id = f"{truncated_file_name}_chunk_{idx}_{secrets.token_hex(4)}"
+                # Generate custom_id as file_name with index
+                custom_id = f"{truncated_file_name}_{idx}"
 
-                # Validate custom_id
+                # Validate custom_id length and ensure it follows the pattern
                 if len(custom_id) > 64:
                     raise ValueError(f"Generated custom_id '{custom_id}' exceeds the length limit.")
+                elif not re.match(r'^[a-zA-Z0-9_-]{1,64}$', custom_id):
+                    raise ValueError(f"Generated custom_id '{custom_id}' does not match the required pattern.")
 
                 # Define params
                 params = {
@@ -105,6 +113,7 @@ async def start_batch_processing(
                 # Create batch request item
                 batch_request_item = BatchRequestItem(custom_id=custom_id, params=params)
                 batch_requests.append(batch_request_item)
+
 
 
         if not batch_requests:
