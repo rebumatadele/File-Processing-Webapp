@@ -20,29 +20,6 @@ router = APIRouter(
 # In-memory task status storage
 task_status: Dict[str, str] = {}
 
-@router.post("/upload", summary="Upload Text Files")
-async def upload_files(files: List[UploadFile] = File(...)):
-    """
-    Upload one or multiple text files to the server.
-    """
-    if not files:
-        raise HTTPException(status_code=400, detail="No files uploaded.")
-
-    for file in files:
-        try:
-            if not file.filename.endswith(".txt"):
-                raise HTTPException(status_code=400, detail=f"File '{file.filename}' is not a .txt file.")
-            content = await file.read()
-            content_str = content.decode('utf-8')  # Assuming text files are utf-8 encoded
-            save_uploaded_file(file.filename, content_str)
-        except HTTPException as he:
-            raise he
-        except Exception as e:
-            handle_error("UploadError", f"Failed to upload file '{file.filename}': {e}")
-            raise HTTPException(status_code=500, detail=f"Failed to upload file '{file.filename}': {e}")
-
-    return {"message": "Files uploaded successfully."}
-
 @router.post("/start", summary="Start Text Processing")
 async def start_processing(
     settings: ProcessingSettings,

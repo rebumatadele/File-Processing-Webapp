@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import config, errors, cache, prompts, files, processing, results
+from app.routers import config, errors, cache, prompts, files, processing, results, claude_batch
 from app.utils.environment import load_environment_variables
 from dotenv import load_dotenv
 
@@ -37,12 +37,13 @@ app.add_middleware(
 
 # Include routers with tags for Swagger grouping
 app.include_router(config.router)
-app.include_router(errors.router)
-app.include_router(cache.router)
 app.include_router(prompts.router)
 app.include_router(files.router)
 app.include_router(processing.router)
+app.include_router(claude_batch.router)
 app.include_router(results.router)
+app.include_router(errors.router)
+app.include_router(cache.router)
 
 @app.get("/", summary="Root Endpoint")
 def read_root():

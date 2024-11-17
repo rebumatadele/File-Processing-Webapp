@@ -37,7 +37,6 @@ async def process_text_stream(
     Returns:
         List[str]: List of responses from the AI provider or cache.
     """
-    # Example chunking logic (you may have your own implementation)
     if chunk_by == "word":
         words = text.split()
         chunks = [' '.join(words[i:i + chunk_size]) for i in range(0, len(words), chunk_size)]

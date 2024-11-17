@@ -5,33 +5,10 @@ import aiosmtplib
 from email.message import EmailMessage
 from typing import List
 from pydantic import EmailStr
-from pydantic_settings import BaseSettings
+from app.settings import settings
 from app.utils.file_utils import handle_error
 from app.utils.retry_decorator import retry
-from dotenv import load_dotenv
 import traceback  # For detailed error logging
-
-# Load environment variables
-load_dotenv()
-
-class EmailSettings(BaseSettings):
-    MAIL_USERNAME: str
-    MAIL_PASSWORD: str
-    MAIL_FROM: EmailStr
-    MAIL_PORT: int
-    MAIL_SERVER: str
-    MAIL_TLS: bool = True
-    MAIL_SSL: bool = False
-
-    class Config:
-        env_prefix = ''  # No prefix, adjust if your env variables have a prefix
-
-# Initialize email settings
-try:
-    email_settings = EmailSettings()
-except Exception as e:
-    handle_error("EmailSettingsError", f"Failed to load email settings: {e}")
-    raise e
 
 @retry(max_retries=3, initial_wait=2, backoff_factor=2, exceptions=(aiosmtplib.SMTPException,))
 async def send_email(
@@ -50,7 +27,7 @@ async def send_email(
         attachments (List[str], optional): List of file paths to attach. Defaults to None.
     """
     message = EmailMessage()
-    message["From"] = str(email_settings.MAIL_FROM)
+    message["From"] = str(settings.mail_from)
     message["To"] = ", ".join(recipients)
     message["Subject"] = subject
     message.set_content(body, subtype="html")
@@ -75,22 +52,22 @@ async def send_email(
 
     try:
         # Determine if SSL is needed
-        if email_settings.MAIL_SSL:
+        if settings.mail_ssl:
             smtp = aiosmtplib.SMTP(
-                hostname=email_settings.MAIL_SERVER,
-                port=email_settings.MAIL_PORT,
+                hostname=settings.mail_server,
+                port=settings.mail_port,
                 use_tls=True,  # SSL/TLS directly
-                username=email_settings.MAIL_USERNAME,
-                password=email_settings.MAIL_PASSWORD,
+                username=settings.mail_username,
+                password=settings.mail_password,
             )
         else:
             smtp = aiosmtplib.SMTP(
-                hostname=email_settings.MAIL_SERVER,
-                port=email_settings.MAIL_PORT,
+                hostname=settings.mail_server,
+                port=settings.mail_port,
                 use_tls=False,
-                start_tls=email_settings.MAIL_TLS,
-                username=email_settings.MAIL_USERNAME,
-                password=email_settings.MAIL_PASSWORD,
+                start_tls=settings.mail_tls,
+                username=settings.mail_username,
+                password=settings.mail_password,
             )
 
         await smtp.connect()
