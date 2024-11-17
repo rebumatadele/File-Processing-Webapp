@@ -1,6 +1,7 @@
 # app/routers/claude_batch.py
 
 import json
+import re
 import time
 import secrets
 import aiohttp
@@ -78,7 +79,21 @@ async def start_batch_processing(
 
             # Create batch request items
             for idx, chunk in enumerate(chunks):
-                custom_id = f"{file_name}_chunk_{idx}_{secrets.token_hex(4)}"
+                # Sanitize file name
+                valid_file_name = re.sub(r'[^a-zA-Z0-9_-]', '_', file_name)
+
+                # Truncate file name if necessary
+                max_file_name_length = 64 - len("_chunk_0_" + secrets.token_hex(4))
+                truncated_file_name = valid_file_name[:max_file_name_length]
+
+                # Generate custom_id
+                custom_id = f"{truncated_file_name}_chunk_{idx}_{secrets.token_hex(4)}"
+
+                # Validate custom_id
+                if len(custom_id) > 64:
+                    raise ValueError(f"Generated custom_id '{custom_id}' exceeds the length limit.")
+
+                # Define params
                 params = {
                     "model": request.selected_model,
                     "max_tokens": 1024,
@@ -86,8 +101,11 @@ async def start_batch_processing(
                         {"role": "user", "content": request.prompt + chunk}
                     ],
                 }
+
+                # Create batch request item
                 batch_request_item = BatchRequestItem(custom_id=custom_id, params=params)
                 batch_requests.append(batch_request_item)
+
 
         if not batch_requests:
             handle_error("BatchProcessingError", "No valid chunks to process.")
