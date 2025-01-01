@@ -40,8 +40,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+Base.metadata.create_all(bind=engine)
 
 # Include routers with tags for Swagger grouping
+app.include_router(auth_router.router)
 app.include_router(config.router)
 app.include_router(prompts.router)
 app.include_router(files.router)
@@ -50,7 +52,6 @@ app.include_router(claude_batch.router)
 app.include_router(results.router)
 app.include_router(errors.router)
 app.include_router(cache.router)
-app.include_router(auth_router.router)
 
 @app.get("/", summary="Root Endpoint")
 def read_root():

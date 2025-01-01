@@ -1,10 +1,9 @@
 # app/models/user.py
 
 from sqlalchemy import Column, ForeignKey, String, Boolean
-from sqlalchemy.dialects.postgresql import UUID
-import uuid
 from sqlalchemy.orm import relationship
 from app.config.database import Base
+import uuid
 
 class User(Base):
     __tablename__ = "users"
@@ -14,6 +13,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
 
+    # Relationships
     config = relationship("UserConfig", back_populates="user", uselist=False)
     batches = relationship("Batch", back_populates="user")
     error_logs = relationship("ErrorLog", back_populates="user")

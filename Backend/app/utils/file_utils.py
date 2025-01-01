@@ -1,5 +1,6 @@
 # app/utils/file_utils.py
 
+from datetime import datetime
 import hashlib
 import os
 import time
@@ -8,12 +9,14 @@ import errno
 import re
 from pathlib import Path
 import json
-from typing import Optional
-
+from typing import Optional, List
+from sqlalchemy.orm import Session
+from app.models.prompt import Prompt
+from app.config.database import SessionLocal  # This import can be removed if sessions are injected
 # Define paths using pathlib for better path handling
 BASE_DIR = Path(__file__).resolve().parent.parent.parent  # Adjust as per directory structure
 ERROR_LOG_PATH = BASE_DIR / "logs" / "error_log.txt"
-PROMPTS_DIR = BASE_DIR / "prompts"
+# Removed PROMPTS_DIR as prompts are now handled via the database
 UPLOAD_DIR = BASE_DIR / "storage" / "uploads"
 PROCESSED_DIR = BASE_DIR / "storage" / "processed"
 
@@ -22,9 +25,6 @@ USER_CONFIG_FILE = CONFIG_DIR / "user_configs.json"
 
 CACHE_DIR = BASE_DIR / "cache"
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
-
-def get_user_prompts_dir(user_id: str) -> Path:
-    return BASE_DIR / "prompts" / user_id
 
 def get_user_upload_dir(user_id: str) -> Path:
     return BASE_DIR / "storage" / "uploads" / user_id
@@ -64,65 +64,91 @@ def sanitize_file_name(file_name: str) -> str:
     """
     return re.sub(r'[<>:"/\\|?*\r\n]+', '_', file_name)
 
-def list_saved_prompts(user_id: str) -> list:
+# ======== Database-Based Prompt Functions ========
+
+def list_saved_prompts(session: Session, user_id: str, search: Optional[str] = None, tags: Optional[List[str]] = None) -> List[str]:
     """
-    Lists all saved prompts for the user.
+    Lists all saved prompts for the user, optionally filtering by search term and tags.
     """
     try:
-        prompts_dir = get_user_prompts_dir(user_id)
-        prompts_dir.mkdir(parents=True, exist_ok=True)
-        prompts = [f.stem for f in prompts_dir.glob('*.txt')]
-        return prompts
-    except OSError as e:
+        query = session.query(Prompt).filter(Prompt.user_id == user_id)
+
+        if search:
+            query = query.filter(Prompt.name.ilike(f"%{search}%"))
+
+        if tags:
+            for tag in tags:
+                query = query.filter(Prompt.tags.ilike(f"%{tag}%"))
+
+        prompts = query.all()
+        return [prompt.name for prompt in prompts]
+    except Exception as e:
         handle_error("ProcessingError", f"Failed to list saved prompts: {e}", user_id=user_id)
         return []
 
-def load_prompt(name: str, user_id: str) -> str:
+def load_prompt(session: Session, name: str, user_id: str) -> Optional[str]:
     """
     Loads a prompt by name for the user.
     """
     try:
-        prompts_dir = get_user_prompts_dir(user_id)
-        prompts_dir.mkdir(parents=True, exist_ok=True)
-        file_path = prompts_dir / f"{sanitize_file_name(name)}.txt"
-        with file_path.open('r', encoding='utf-8') as file:
-            return file.read()
-    except FileNotFoundError:
-        handle_error("FileNotFound", f"Prompt '{name}' not found.", user_id=user_id)
-        return ""
-    except OSError as e:
+        prompt = session.query(Prompt).filter_by(user_id=user_id, name=name).first()
+        if prompt:
+            return prompt.content
+        else:
+            handle_error("FileNotFound", f"Prompt '{name}' not found.", user_id=user_id)
+            return None
+    except Exception as e:
         handle_error("ProcessingError", f"Failed to load prompt '{name}': {e}", user_id=user_id)
-        return ""
+        return None
 
-def save_prompt(name: str, content: str, user_id: str):
+def save_prompt(session: Session, name: str, content: str, user_id: str, description: Optional[str] = None, tags: Optional[List[str]] = None):
     """
     Saves a prompt with the given name and content for the user.
+    If the prompt exists, it updates the existing prompt.
     """
     try:
-        prompts_dir = get_user_prompts_dir(user_id)
-        prompts_dir.mkdir(parents=True, exist_ok=True)
-        file_path = prompts_dir / f"{sanitize_file_name(name)}.txt"
-        with file_path.open('w', encoding='utf-8') as file:
-            file.write(content)
-    except OSError as e:
-        if e.errno == errno.ENOSPC:
-            handle_error("StorageError", "No space left on device. Unable to save the prompt.", user_id=user_id)
-        else:
-            handle_error("ProcessingError", f"Failed to save prompt '{name}': {e}", user_id=user_id)
+        prompt = session.query(Prompt).filter_by(user_id=user_id, name=name).first()
 
-def delete_prompt(name: str, user_id: str):
+        if prompt:
+            # Update existing prompt
+            prompt.content = content
+            prompt.description = description if description is not None else prompt.description
+            prompt.tags = ",".join(tags) if tags else prompt.tags
+            prompt.updated_at = datetime.utcnow()
+        else:
+            # Create new prompt
+            new_prompt = Prompt(
+                user_id=user_id,
+                name=name,
+                content=content,
+                description=description,
+                tags=",".join(tags) if tags else None,
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            session.add(new_prompt)
+
+        session.commit()
+    except Exception as e:
+        handle_error("ProcessingError", f"Failed to save prompt '{name}': {e}", user_id=user_id)
+        session.rollback()
+
+def delete_prompt(session: Session, name: str, user_id: str):
     """
     Deletes a prompt by name for the user.
     """
     try:
-        prompts_dir = get_user_prompts_dir(user_id)
-        file_path = prompts_dir / f"{sanitize_file_name(name)}.txt"
-        if file_path.exists():
-            file_path.unlink()
+        prompt = session.query(Prompt).filter_by(user_id=user_id, name=name).first()
+        if prompt:
+            session.delete(prompt)
+            session.commit()
         else:
             handle_error("FileNotFound", f"Prompt '{name}' does not exist.", user_id=user_id)
-    except OSError as e:
+    except Exception as e:
         handle_error("ProcessingError", f"Failed to delete prompt '{name}': {e}", user_id=user_id)
+        session.rollback()
+
+# ======== Other File-Based Functionalities ========
 
 def clear_error_logs(user_id: str):
     """
@@ -195,7 +221,6 @@ def load_uploaded_file_content(filename: str, user_id: str) -> str:
     try:
         user_upload_dir = get_user_upload_dir(user_id)
         file_path = user_upload_dir / sanitize_file_name(filename)
-        print(f"Attempting to load file: {file_path}")  # Debug log
         with file_path.open('r', encoding='utf-8') as file:
             return file.read()
     except FileNotFoundError:
@@ -327,7 +352,7 @@ def get_user_config(user_id: str) -> Optional[dict]:
         handle_error("ProcessingError", f"Failed to retrieve user config for {user_id}: {e}", user_id=user_id)
         return None
 
-# Cache-related functions
+# ======== Cache-Related Functions ========
 
 def generate_cache_key(chunk: str, provider_choice: str, model_choice: Optional[str], user_id: str) -> str:
     """

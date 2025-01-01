@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     secret_key: str = "qwertyuioplkjhgfdsazxcvbnm"  # Use a strong, unique key
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
-    database_url: str = "sqlite:///./test.db"  # Example for SQLite
+    database_url: str = "sqlite:///./file_processor_backend_db.db"
 
     model_config = {
         "env_file": ".env",  # Specifies the .env file location

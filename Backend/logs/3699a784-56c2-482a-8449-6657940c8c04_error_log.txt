@@ -1,0 +1,6 @@
+[2025-01-01 10:26:17] - FileNotFound: Prompt 'search' not found.
+[2025-01-01 10:26:17] - ProcessingError: Failed to load prompt 'search': 404: Prompt not found.
+[2025-01-01 10:26:33] - FileNotFound: Prompt 'search' not found.
+[2025-01-01 10:26:33] - ProcessingError: Failed to load prompt 'search': 404: Prompt not found.
+[2025-01-01 10:26:42] - FileNotFound: Prompt 'search' not found.
+[2025-01-01 10:26:42] - ProcessingError: Failed to load prompt 'search': 404: Prompt not found.
