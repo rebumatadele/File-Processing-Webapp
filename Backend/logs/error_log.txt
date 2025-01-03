@@ -30,3 +30,4 @@ uploaded_at
 [2024-11-17 23:48:58] - ProcessingError: Failed to load prompt: 404: Prompt not found.
 [2024-11-17 23:48:58] - ProcessingError: Failed to load prompt: 404: Prompt not found.
 [2025-01-01 09:38:18] - APIError: Failed to retrieve user configuration: 404: User configuration not found.
+[2025-01-01 14:14:35] - CallbackError: Callback processing failed: Expecting value: line 1 column 1 (char 0)

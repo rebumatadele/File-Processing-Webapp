@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from app.routers import (
-    auth_router, config, errors, cache, prompts, files, processing, results, claude_batch
+    auth_router, config, errors, cache, prompts, files, processing, results, claude_batch, claude_callback
 )
 from app.utils.environment import load_environment_variables
 from dotenv import load_dotenv
@@ -52,7 +52,7 @@ app.include_router(claude_batch.router)
 app.include_router(results.router)
 app.include_router(errors.router)
 app.include_router(cache.router)
-
+app.include_router(claude_callback.router)
 @app.get("/", summary="Root Endpoint")
 def read_root():
     return {"message": "Welcome to the Text Processor with Generative AI!"}

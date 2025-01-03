@@ -4,3 +4,10 @@
 [2025-01-01 10:26:33] - ProcessingError: Failed to load prompt 'search': 404: Prompt not found.
 [2025-01-01 10:26:42] - FileNotFound: Prompt 'search' not found.
 [2025-01-01 10:26:42] - ProcessingError: Failed to load prompt 'search': 404: Prompt not found.
+[2025-01-01 14:11:15] - BatchStartError: Failed to start batch processing: 400: No files found for batch processing.
+[2025-01-01 14:13:47] - BatchStartError: Failed to start batch processing: 
+[2025-01-03 11:15:41] - BatchStartError: Failed to start batch processing: 
+[2025-01-03 11:38:42] - BatchStartError: Failed to start batch processing: Client error '400 Bad Request' for url 'https://claude-integration-service-1.onrender.com/queue/bulk'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
+[2025-01-03 11:39:27] - BatchStartError: Failed to start batch processing: Client error '400 Bad Request' for url 'https://claude-integration-service-1.onrender.com/queue/bulk'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/400
