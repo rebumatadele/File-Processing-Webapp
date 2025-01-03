@@ -82,7 +82,7 @@ async def start_batch_processing(
 
         # 3) Build JSON payload with your callback URL
         # If you're testing locally and can't use a real domain, consider using ngrok or skipping callback
-        callback_url = "https://file-processing-webapp.onrender.com/batch_callback"
+        callback_url = "https://file-processing-webapp.onrender.com/claude_callback/batch_callback"
 
         payload = {
             "chunks": all_chunks,
