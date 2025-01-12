@@ -13,7 +13,7 @@ router = APIRouter(
     tags=["Claude Integration Callback"],
 )
 
-@router.post("/batch_callback/")
+@router.post("/batch_callback")
 async def claude_integration_callback(request: Request):
     """
     Endpoint that the Integration Service calls once all chunks are processed.
