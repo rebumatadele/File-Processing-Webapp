@@ -6,6 +6,7 @@ from app.config.database import SessionLocal
 from app.models.claude_batch import Batch
 from app.utils.file_utils import handle_error, save_processed_result
 from datetime import datetime
+from app.routers.ws_results import broadcast_new_result
 
 router = APIRouter(
     prefix="/processing/claude",
@@ -44,6 +45,11 @@ async def claude_integration_callback(request: Request):
         save_processed_result(filename, final_result, user_id=user_id)
 
         db.close()
+        await broadcast_new_result({
+            "job_id": job_id,
+            "final_result": final_result,
+            "timestamp": datetime.utcnow().isoformat()
+        })
 
         return {"message": f"Callback received for job_id={job_id}"}
     except Exception as e:
