@@ -81,7 +81,7 @@ async def start_batch_processing(
             raise HTTPException(status_code=400, detail="No valid chunks to process.")
 
         # 3) Build JSON payload with your callback URL
-        callback_url = "https://file-processing-webapp.onrender.com/processing/claude/batch_callback/"
+        callback_url = "https://file-processing-webapp.onrender.com/processing/claude/batch_callback"
 
         payload = {
             "chunks": all_chunks,
