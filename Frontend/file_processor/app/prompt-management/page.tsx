@@ -30,24 +30,26 @@ export default function PromptManagementPage() {
   }, [])
 
   const fetchPrompts = async () => {
-    setIsLoading(true)
+    setIsLoading(true);
     try {
-      const promptNames = await listPrompts()
+      // Destructure the response to get the list of prompt names
+      const { prompts: promptNames } = await listPrompts();
+
       const fetchedPrompts = await Promise.all(
-        promptNames.map(async (name) => {
-          const prompt = await loadPrompt(name)
-          return { ...prompt, id: name }
+        promptNames.map(async (name: string) => {
+          const prompt = await loadPrompt(name);
+          return { ...prompt, id: name };
         })
-      )
-      setPrompts(fetchedPrompts)
+      );
+      setPrompts(fetchedPrompts);
     } catch {
       toast({
         title: "Error",
         description: "Failed to fetch prompts.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
   }
 

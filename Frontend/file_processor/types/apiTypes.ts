@@ -71,10 +71,6 @@ export interface GetAllResultsResponse {
   [filename: string]: string;
 }
 
-export interface ClearCacheResponse {
-  message: string;
-}
-
 export interface CacheSizeResponse {
   cache_size_bytes: number;
 }
@@ -139,4 +135,9 @@ export interface CancelBatchResponse {
 
 export interface BatchListResponse {
   [batch_id: string]: BatchStatusResponse;
+}
+
+export interface FileContentResponse {
+  filename: string;
+  content: string;
 }

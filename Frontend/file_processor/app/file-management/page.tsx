@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "@/hooks/use-toast"
 import { Loader2, Upload, Trash2, Save, FileText, FolderOpen, Edit2 } from 'lucide-react'
 import { uploadFiles, listFiles, getFileContent, editFileContent, clearFiles } from '@/api/fileUtils'
-import { UploadedFileInfo } from '@/types/apiTypes'
+import { FileContentResponse } from '@/types/apiTypes'
 
 export default function FileManagementPage() {
   const [files, setFiles] = useState<File[]>([])
@@ -46,6 +46,8 @@ export default function FileManagementPage() {
   }
 
   const handleUpload = async () => {
+    if (files.length === 0) return
+
     setIsLoading(true)
     try {
       await uploadFiles(files)
@@ -53,7 +55,7 @@ export default function FileManagementPage() {
         title: "Files uploaded",
         description: "Your files have been successfully uploaded.",
       })
-      fetchFiles()
+      await fetchFiles()
       setFiles([])
     } catch {
       toast({
@@ -67,22 +69,23 @@ export default function FileManagementPage() {
   }
 
   const handleSelectFile = async (filename: string) => {
-    setIsLoading(true)
+    setIsLoading(true);
     try {
-      const fileInfo: UploadedFileInfo = await getFileContent(filename)
-      setSelectedFile(filename)
-      setFileContent(fileInfo.content)
-      setIsEditing(false)
-    } catch {
+      const fileInfo: FileContentResponse = await getFileContent(filename);
+      setSelectedFile(fileInfo.filename);
+      setFileContent(fileInfo.content);
+      setIsEditing(false);
+    } catch (error) {
+      console.error("Error fetching file content:", error);
       toast({
         title: "Error",
         description: "Failed to fetch file content. Please try again.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleSaveContent = async () => {
     if (!selectedFile) return
@@ -147,6 +150,7 @@ export default function FileManagementPage() {
                   multiple
                   onChange={handleFileChange}
                   className="flex-grow"
+                  disabled={isLoading}
                 />
                 <Button
                   onClick={handleUpload}
@@ -182,6 +186,7 @@ export default function FileManagementPage() {
                         variant="ghost"
                         className="w-full justify-start mb-2"
                         onClick={() => handleSelectFile(file)}
+                        disabled={isLoading}
                       >
                         <FileText className="mr-2 h-4 w-4" />
                         {file}

@@ -4,33 +4,19 @@ import axiosInstance from './axiosInstance';
 import { 
   ConfigRequest, 
   ConfigResponse, 
-  SaveUserConfigRequest, 
-  SaveUserConfigResponse,
-  GetUserConfigResponse
+  GetUserConfigResponse 
 } from '../types/apiTypes';
 import handleError from '../utils/handleError';
 
 /**
- * Configures the AI provider.
+ * Configures and saves the user's AI provider settings.
  * @param {ConfigRequest} config - Configuration data.
  * @returns {Promise<ConfigResponse>}
  */
 export const configureProvider = async (config: ConfigRequest): Promise<ConfigResponse> => {
   try {
-    const response = await axiosInstance.post<ConfigResponse>('/config/configure', config);
-    return response.data;
-  } catch (error) {
-    return handleError(error);
-  }
-};
-/**
- * Saves a user's configuration, including API keys.
- * @param {SaveUserConfigRequest} userConfig - User configuration data.
- * @returns {Promise<SaveUserConfigResponse>}
- */
-export const saveUserConfig = async (userConfig: SaveUserConfigRequest): Promise<SaveUserConfigResponse> => {
-  try {
-    const response = await axiosInstance.post<SaveUserConfigResponse>('/config/save', userConfig);
+    // Using the /config/save route as defined by the backend.
+    const response = await axiosInstance.post<ConfigResponse>('/config/save', config);
     return response.data;
   } catch (error) {
     return handleError(error);
@@ -38,13 +24,12 @@ export const saveUserConfig = async (userConfig: SaveUserConfigRequest): Promise
 };
 
 /**
- * Retrieves a user's configuration by user ID.
- * @param {string} userId - The user's ID.
+ * Retrieves the current user's configuration.
  * @returns {Promise<GetUserConfigResponse>}
  */
-export const getUserConfig = async (userId: string): Promise<GetUserConfigResponse> => {
+export const getUserConfig = async (): Promise<GetUserConfigResponse> => {
   try {
-    const response = await axiosInstance.get<GetUserConfigResponse>(`/config/get/${userId}`);
+    const response = await axiosInstance.get<GetUserConfigResponse>('/config/get');
     return response.data;
   } catch (error) {
     return handleError(error);

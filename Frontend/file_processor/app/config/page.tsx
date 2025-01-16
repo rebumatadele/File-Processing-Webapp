@@ -25,8 +25,8 @@ import {
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/hooks/use-toast"
-import { configureProvider, saveUserConfig, getUserConfig } from '../../api/configUtils'
-import { ConfigRequest, SaveUserConfigRequest } from '@/types/apiTypes'
+import { configureProvider, getUserConfig } from '../../api/configUtils'
+import { ConfigRequest } from '@/types/apiTypes'
 
 const formSchema = z.object({
   selected_model: z.string().min(1, 'Please select a model'),
@@ -67,18 +67,51 @@ export default function ConfigurationPage() {
   useEffect(() => {
     const loadUserConfig = async () => {
       try {
-        const config = await getUserConfig("2") // Assuming Gemini as default
+        const config = await getUserConfig();
+  
         if (config) {
-          form.setValue('provider_choice', 'Gemini')
-          form.setValue('api_key', config.gemini_api_key || '')
-          form.setValue('selected_model', modelOptions.Gemini[0])
+          // Populate form based on retrieved configuration
+          if (config.gemini_api_key) {
+            form.setValue('provider_choice', 'Gemini');
+            form.setValue('api_key', config.gemini_api_key || '');
+            form.setValue('selected_model', modelOptions.Gemini[0]);
+          } else if (config.anthropic_api_key) {
+            form.setValue('provider_choice', 'Anthropic');
+            form.setValue('api_key', config.anthropic_api_key || '');
+            form.setValue('selected_model', modelOptions.Anthropic[0]);
+          } else if (config.openai_api_key) {
+            form.setValue('provider_choice', 'OpenAI');
+            form.setValue('api_key', config.openai_api_key || '');
+            form.setValue('selected_model', modelOptions.OpenAI[0]);
+          } else {
+            toast({
+              title: "Configuration Not Found",
+              description: "No configuration found for your account. Please set up your preferences.",
+              variant: "destructive",
+            });
+          }
+        } else {
+          toast({
+            title: "Configuration Not Found",
+            description: "No configuration found for your account. Please set up your preferences.",
+            variant: "destructive",
+          });
         }
       } catch (error) {
-        console.error("Failed to load user configuration", error)
+        toast({
+          title: "Error Loading Configuration",
+          description:
+            error instanceof Error
+              ? error.message
+              : "An unexpected error occurred while loading your configuration. Please try again.",
+          variant: "destructive",
+        });
       }
-    }
-    loadUserConfig()
-  }, [form])
+    };
+  
+    loadUserConfig();
+    // Removed toast from dependency array
+  }, [form]);
 
   const onSubmit = async (data: FormValues) => {
     setIsLoading(true)
@@ -90,17 +123,6 @@ export default function ConfigurationPage() {
       }
 
       await configureProvider(configRequest)
-
-      let saveConfigRequest: SaveUserConfigRequest;
-      if (data.provider_choice === "Gemini") {
-        saveConfigRequest = { user_id: "2", gemini_api_key: data.api_key }
-      } else if (data.provider_choice === "Anthropic") {
-        saveConfigRequest = { user_id: "3", anthropic_api_key: data.api_key }
-      } else {
-        saveConfigRequest = { user_id: "1", openai_api_key: data.api_key }
-      }
-
-      await saveUserConfig(saveConfigRequest)
 
       toast({
         title: "Configuration saved",
@@ -130,6 +152,7 @@ export default function ConfigurationPage() {
         <CardContent className="p-6">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              {/* Provider Choice Field */}
               <FormField
                 control={form.control}
                 name="provider_choice"
@@ -159,6 +182,7 @@ export default function ConfigurationPage() {
                 )}
               />
 
+              {/* Model Selection Field */}
               <FormField
                 control={form.control}
                 name="selected_model"
@@ -188,6 +212,7 @@ export default function ConfigurationPage() {
                 )}
               />
 
+              {/* API Key Field */}
               <FormField
                 control={form.control}
                 name="api_key"

@@ -1,5 +1,3 @@
-// src/api/resultsUtils.ts
-
 import axiosInstance from './axiosInstance';
 import { 
   ProcessingResult, 
@@ -27,7 +25,7 @@ export const getAllResults = async (): Promise<GetAllResultsResponse> => {
  */
 export const getResult = async (filename: string): Promise<ProcessingResult> => {
   try {
-    const response = await axiosInstance.get<ProcessingResult>(`/results/${filename}`);
+    const response = await axiosInstance.get<ProcessingResult>(`/results/${encodeURIComponent(filename)}`);
     return response.data;
   } catch (error) {
     return handleError(error);
@@ -41,7 +39,7 @@ export const getResult = async (filename: string): Promise<ProcessingResult> => 
  */
 export const downloadResult = async (filename: string): Promise<Blob> => {
   try {
-    const response = await axiosInstance.get(`/results/${filename}/download`, {
+    const response = await axiosInstance.get(`/results/${encodeURIComponent(filename)}/download`, {
       responseType: 'blob',
     });
     return response.data;

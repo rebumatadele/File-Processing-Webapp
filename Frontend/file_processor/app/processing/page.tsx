@@ -71,49 +71,60 @@ export default function ProcessingPage() {
   const providerChoice = form.watch('provider_choice')
   
   useEffect(() => {
-    fetchPrompts()
-    getUserConfig("1").then((config) => {
-      if (config) {
-        setOpenaiApiKey(config.openai_api_key || '')
-      }
-    })
-    getUserConfig("2").then((config) => {
-      if (config) {
-        setGeminiApiKey(config.gemini_api_key || '')
-      }
-    })
-    getUserConfig("3").then((config) => {
-      if (config) {
-        setAnthropicApiKey(config.anthropic_api_key || '')
-      }
-    })
-  }, [])
+    fetchPrompts();
+    // Fetch user configuration once and update API keys
+    getUserConfig()
+      .then((config) => {
+        if (config) {
+          setOpenaiApiKey(config.openai_api_key || '');
+          setGeminiApiKey(config.gemini_api_key || '');
+          setAnthropicApiKey(config.anthropic_api_key || '');
+        }
+      })
+      .catch((error) => {
+        // Handle 404 or other errors gracefully
+        console.warn('User configuration not found or failed to retrieve.', error);
+        // Optionally show a toast if needed, e.g.:
+        // toast({ title: "Info", description: "No user configuration found.", variant: "info" });
+      });
+  }, []);
+  
 
   const fetchPrompts = async () => {
-    try {
-      const promptList = await listPrompts()
-      setPrompts(promptList)
-    } catch {
-      toast({
-        title: "Error",
-        description: "Failed to fetch prompts. Please try again.",
-        variant: "destructive",
-      })
-    }
-  }
+      try {
+        const result = await listPrompts();
+        if (result && Array.isArray(result.prompts)) {
+          setPrompts(result.prompts);
+        } else if (Array.isArray(result)) {
+          setPrompts(result);
+        } else {
+          throw new Error("Unexpected response structure");
+        }
+      } catch {
+        toast({
+          title: "Error",
+          description: "Failed to fetch prompts. Please try again.",
+          variant: "destructive",
+        });
+      }
+    };
+    
+  
 
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
-    setIsLoading(true)
+    setIsLoading(true);
+    console.log("Submitting processing request with data:", data);  // Debug log
+  
     try {
-      let apiKey = ''
+      let apiKey = '';
       if (data.provider_choice === 'OpenAI') {
-        apiKey = openaiApiKey
+        apiKey = openaiApiKey;
       } else if (data.provider_choice === 'Anthropic') {
-        apiKey = anthropicApiKey
+        apiKey = anthropicApiKey;
       } else if (data.provider_choice === 'Gemini') {
-        apiKey = geminiApiKey
+        apiKey = geminiApiKey;
       }
-
+  
       const settings: ProcessingSettings = {
         provider_choice: data.provider_choice,
         prompt: data.prompt,
@@ -124,25 +135,29 @@ export default function ProcessingPage() {
         openai_api_key: data.provider_choice === 'OpenAI' ? apiKey : '',
         anthropic_api_key: data.provider_choice === 'Anthropic' ? apiKey : '',
         gemini_api_key: data.provider_choice === 'Gemini' ? apiKey : '',
-      }
-
-      const response = await startProcessing(settings)
-      setTaskId(response.task_id)
+      };
+  
+      console.log("Settings being sent:", settings);  // Debug log
+  
+      const response = await startProcessing(settings);
+      console.log("Received response:", response);  // Debug log
+  
+      setTaskId(response.task_id);
       toast({
         title: "Processing started",
         description: `Task ID: ${response.task_id}`,
-      })
+      });
     } catch (error: unknown) {
+      console.error("Error starting processing:", error);  // Log error details
       toast({
         title: "Error",
         description: (error as Error).message || "Failed to start processing. Please try again.",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
-
+  };
   const checkTaskStatus = async () => {
     if (!taskId) return
 

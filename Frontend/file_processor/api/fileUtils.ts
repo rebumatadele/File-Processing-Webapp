@@ -1,12 +1,9 @@
-// src/api/fileUtils.ts
-
 import axiosInstance from './axiosInstance';
 import { 
   UploadFilesResponse, 
-  UploadedFileInfo, 
-  EditFileContentRequest, 
   ClearFilesResponse, 
-  GetFilesSizeResponse 
+  GetFilesSizeResponse,
+  FileContentResponse,
 } from '../types/apiTypes';
 import handleError from '../utils/handleError';
 
@@ -49,11 +46,13 @@ export const listFiles = async (): Promise<string[]> => {
 /**
  * Retrieves the content of a specific uploaded file.
  * @param {string} filename - Name of the file.
- * @returns {Promise<UploadedFileInfo>}
+ * @returns {Promise<FileContentResponse>}
  */
-export const getFileContent = async (filename: string): Promise<UploadedFileInfo> => {
+export const getFileContent = async (filename: string): Promise<FileContentResponse> => {
   try {
-    const response = await axiosInstance.get<UploadedFileInfo>(`/files/${filename}`);
+    const response = await axiosInstance.get<FileContentResponse>(
+      `/files/${encodeURIComponent(filename)}`
+    );
     return response.data;
   } catch (error) {
     return handleError(error);
@@ -64,17 +63,25 @@ export const getFileContent = async (filename: string): Promise<UploadedFileInfo
  * Edits the content of a specific uploaded file.
  * @param {string} filename - Name of the file.
  * @param {string} newContent - New content for the file.
- * @returns {Promise<{ message: string }>}
+ * @returns {Promise<{ message: string }>}.
  */
-export const editFileContent = async (filename: string, newContent: string): Promise<{ message: string }> => {
+export const editFileContent = async (
+  filename: string,
+  newContent: string
+): Promise<{ message: string }> => {
   try {
-    const payload: EditFileContentRequest = { new_content: newContent };
-    const response = await axiosInstance.put<{ message: string }>(`/files/${filename}`, payload);
+    // Pass new_content as a query parameter
+    const response = await axiosInstance.put<{ message: string }>(
+      `/files/${encodeURIComponent(filename)}`,
+      null,
+      { params: { new_content: newContent } }
+    );
     return response.data;
   } catch (error) {
     return handleError(error);
   }
 };
+
 
 /**
  * Clears all uploaded files.
