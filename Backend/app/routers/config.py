@@ -15,31 +15,6 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-# @router.post("/configure", summary="Configure AI Provider")
-# def configure_provider(
-#     config: ConfigRequest,
-#     current_user: User = Depends(get_current_user),
-# ):
-#     """
-#     Configure the AI provider with the selected model and API key for the current user.
-#     """
-#     try:
-#         if config.provider_choice == "OpenAI":
-#             configure_openai(config.api_key)
-#         elif config.provider_choice == "Anthropic":
-#             configure_anthropic(config.api_key)
-#         elif config.provider_choice == "Gemini":
-#             configure_gemini(config.api_key)
-#         else:
-#             raise HTTPException(status_code=400, detail="Invalid provider choice.")
-#         return {"message": f"{config.provider_choice} configured successfully!"}
-#     except Exception as e:
-#         handle_error("APIError", f"Configuration failed: {e}")
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail=f"Configuration failed: {e}",
-#         )
-
 @router.post("/save", summary="Save User Configuration", response_model=UserConfigResponse)
 def save_configuration(
     config_request: ConfigRequest,

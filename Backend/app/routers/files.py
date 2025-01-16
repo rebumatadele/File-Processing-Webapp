@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
 from typing import List
 from app.models.user import User
 from app.providers.auth import get_current_user
-from app.schemas.file_schemas import UploadedFileSchema
+from app.schemas.file_schemas import FileContentSchema
 from app.utils.file_utils import (
     get_processed_files_size,
     get_uploaded_files_size,
@@ -58,7 +58,7 @@ def list_files(
         handle_error("ProcessingError", f"Failed to list files: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to list files: {e}")
 
-@router.get("/{filename}", summary="Get File Content", response_model=UploadedFileSchema)
+@router.get("/{filename}", summary="Get File Content", response_model=FileContentSchema)
 def get_file_content(
     filename: str,
     current_user: User = Depends(get_current_user)
@@ -70,10 +70,11 @@ def get_file_content(
         content = load_uploaded_file_content(filename, user_id=current_user.id)
         if not content:
             raise HTTPException(status_code=404, detail="File not found.")
-        return UploadedFileSchema(filename=filename, content=content)
+        return FileContentSchema(filename=filename, content=content)
     except Exception as e:
         handle_error("ProcessingError", f"Failed to retrieve file: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve file: {e}")
+
 
 @router.put("/{filename}", summary="Edit File Content")
 def edit_file_content(

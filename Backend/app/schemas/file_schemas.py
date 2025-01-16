@@ -23,3 +23,6 @@ class ProcessedFileSchema(BaseModel):
 
     class Config:
         from_attributes = True
+class FileContentSchema(BaseModel):
+    filename: str
+    content: str
