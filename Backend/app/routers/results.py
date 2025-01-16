@@ -41,10 +41,20 @@ def get_result(
         content = results.get(filename)
         if not content:
             raise HTTPException(status_code=404, detail="Processed result not found for the specified file.")
-        return ProcessingResultSchema(filename=filename, content=content)
+        
+        # Return a complete ProcessingResultSchema instance
+        return ProcessingResultSchema(
+            id=None,  # Set to None or retrieve actual id if available
+            user_id=str(current_user.id) if current_user.id else None,
+            job_id=None,  # Set to None or actual job_id if available
+            filename=filename,
+            content=content,
+            created_at=None  # Set to None or actual datetime if available
+        )
     except Exception as e:
         handle_error("ProcessingError", f"Failed to retrieve result: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve result: {e}")
+
 
 @router.get("/{filename}/download", summary="Download Processed Result")
 def download_result(
