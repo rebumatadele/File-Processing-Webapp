@@ -51,28 +51,55 @@ export default function ClaudeBatchProcessingPage() {
   })
 
   useEffect(() => {
-    fetchPrompts()
-    fetchBatches()
-    getUserConfig("3").then((config) => {
-      if (config) {
-        setAnthropicApiKey(config.anthropic_api_key || '')
-        form.setValue('anthropic_api_key', config.anthropic_api_key || '')
-      }
-    })
-  }, [])
+    fetchPrompts();
+    fetchBatches();
+    getUserConfig()
+      .then((config) => {
+        console.log("Fetched user config:", config);
+        if (config) {
+          // Update your local states
+          setAnthropicApiKey(config.anthropic_api_key || "");
+  
+          // Also update the form fields
+          if (config.anthropic_api_key) {
+            form.setValue("anthropic_api_key", config.anthropic_api_key);
+          }
+        }
+      })
+      .catch((error) => {
+        console.warn("User configuration not found or failed to retrieve.", error);
+      });
+  }, []);
+  
+  
 
   const fetchPrompts = async () => {
+    console.log('fetchPrompts -> Called');
     try {
-      const promptList = await listPrompts()
-      setPrompts(promptList)
-    } catch {
+      const result = await listPrompts();
+      console.log('fetchPrompts -> result:', result);
+
+      // If result has a .prompts array, set that
+      if (result && Array.isArray(result.prompts)) {
+        setPrompts(result.prompts);
+      }
+      // If result is just an array, set that
+      else if (Array.isArray(result)) {
+        setPrompts(result);
+      }
+      // Otherwise, throw an error for unexpected structure
+      else {
+        throw new Error('Unexpected response structure');
+      }
+    } catch (err) {
+      console.error('fetchPrompts -> error:', err);
       toast({
-        title: "Error",
-        description: "Failed to fetch prompts. Please try again.",
-        variant: "destructive",
-      })
+        title: 'Error',
+        description: 'Failed to fetch prompts. Please try again.',
+        variant: 'destructive',
+      });
     }
-  }
+  };
 
   const fetchBatches = async () => {
     setIsLoading(true)

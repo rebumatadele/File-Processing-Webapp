@@ -1,4 +1,4 @@
-"use client";
+'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation'; // Use next/navigation for App Router
@@ -12,11 +12,14 @@ import axiosInstance from '@/api/axiosInstance';
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false); // Loader state
   const { toast } = useToast();
-  const router = useRouter(); // Use next/navigation
+  const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true); // Start loader
+
     try {
       const response = await axiosInstance.post('/auth/login', {
         email,
@@ -27,23 +30,29 @@ export default function LoginPage() {
       // Store the token in localStorage
       localStorage.setItem('access_token', access_token);
 
-      // Optional: Set a cookie for middleware (if necessary)
+      // Optionally set a cookie for middleware
       document.cookie = `access_token=${access_token}; path=/`;
+
+      // Dispatch custom event to notify Navbar of auth change
+      window.dispatchEvent(new Event('authChange'));
 
       toast({
         title: 'Success',
         description: 'Logged in successfully',
       });
 
-      // Redirect to home or desired page
       router.push('/');
     } catch (error: unknown) {
-      const errorMessage = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Login failed';
+      const errorMessage =
+        (error as { response?: { data?: { detail?: string } } })
+          .response?.data?.detail || 'Login failed';
       toast({
         title: 'Error',
         description: errorMessage,
         variant: 'destructive',
       });
+    } finally {
+      setIsLoading(false); // Stop loader
     }
   };
 
@@ -71,7 +80,9 @@ export default function LoginPage() {
             required
           />
         </div>
-        <Button type="submit">Login</Button>
+        <Button type="submit" disabled={isLoading}>
+          {isLoading ? 'Logging in...' : 'Login'}
+        </Button>
       </form>
       <p className="text-sm mt-2">
         Don&apos;t have an account?{' '}

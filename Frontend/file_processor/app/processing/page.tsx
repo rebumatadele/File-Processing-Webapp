@@ -12,10 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Play, RefreshCw, Eye, EyeOff, Cpu, Zap, Mail, Layers, SplitSquareVertical } from 'lucide-react'
 import { startProcessing, getTaskStatus } from '@/api/processingUtils'
-import { listPrompts } from '@/api/promptUtils'
-import { ProcessingSettings, TaskStatusResponse } from '@/types/apiTypes'
+import { listPrompts, loadPrompt } from '@/api/promptUtils'
 import { getUserConfig } from '@/api/configUtils'
+import { ProcessingSettings, TaskStatusResponse } from '@/types/apiTypes'
 
+/** Zod Schema */
 const formSchema = z.object({
   provider_choice: z.enum(['OpenAI', 'Anthropic', 'Gemini']),
   prompt: z.string().min(1, 'Please select a prompt'),
@@ -34,25 +35,27 @@ const formSchema = z.object({
 }, {
   message: 'API Key is required for the selected provider',
   path: ['api_key'],
-})
+});
 
 const modelOptions = {
   OpenAI: ['gpt-3.5-turbo', 'gpt-4'],
   Anthropic: ['claude-3-5-sonnet-20240620', 'claude-3-5'],
   Gemini: ['gemini-1.5-flash', 'gemini-1.5'],
-}
+};
 
 export default function ProcessingPage() {
-  const [isLoading, setIsLoading] = useState(false)
-  const [prompts, setPrompts] = useState<string[]>([])
-  const [taskId, setTaskId] = useState<string | null>(null)
-  const [taskStatus, setTaskStatus] = useState<TaskStatusResponse | null>(null)
-  const [showApiKey, setShowApiKey] = useState(false)
-  const [openaiApiKey, setOpenaiApiKey] = useState<string>('')
-  const [anthropicApiKey, setAnthropicApiKey] = useState<string>('')
-  const [geminiApiKey, setGeminiApiKey] = useState<string>('')
+  const [isLoading, setIsLoading] = useState(false);
+  const [prompts, setPrompts] = useState<string[]>([]);
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [taskStatus, setTaskStatus] = useState<TaskStatusResponse | null>(null);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [openaiApiKey, setOpenaiApiKey] = useState<string>('');
+  const [anthropicApiKey, setAnthropicApiKey] = useState<string>('');
+  const [geminiApiKey, setGeminiApiKey] = useState<string>('');
 
-  const { toast } = useToast()
+  const { toast } = useToast();
+
+  /** React Hook Form Setup */
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -66,55 +69,76 @@ export default function ProcessingPage() {
       anthropic_api_key: '',
       gemini_api_key: '',
     },
-  })
+  });
 
-  const providerChoice = form.watch('provider_choice')
-  
+  /** Watch the current provider choice for conditional rendering */
+  const providerChoice = form.watch('provider_choice');
+
+  /** On Mount: fetch prompts & user config */
   useEffect(() => {
     fetchPrompts();
-    // Fetch user configuration once and update API keys
+  
     getUserConfig()
       .then((config) => {
+        console.log("Fetched user config:", config);
         if (config) {
-          setOpenaiApiKey(config.openai_api_key || '');
-          setGeminiApiKey(config.gemini_api_key || '');
-          setAnthropicApiKey(config.anthropic_api_key || '');
+          // Update your local states
+          setOpenaiApiKey(config.openai_api_key || "");
+          setGeminiApiKey(config.gemini_api_key || "");
+          setAnthropicApiKey(config.anthropic_api_key || "");
+  
+          // Also update the form fields
+          if (config.openai_api_key) {
+            form.setValue("openai_api_key", config.openai_api_key);
+          }
+          if (config.anthropic_api_key) {
+            form.setValue("anthropic_api_key", config.anthropic_api_key);
+          }
+          if (config.gemini_api_key) {
+            form.setValue("gemini_api_key", config.gemini_api_key);
+          }
         }
       })
       .catch((error) => {
-        // Handle 404 or other errors gracefully
-        console.warn('User configuration not found or failed to retrieve.', error);
-        // Optionally show a toast if needed, e.g.:
-        // toast({ title: "Info", description: "No user configuration found.", variant: "info" });
+        console.warn("User configuration not found or failed to retrieve.", error);
       });
   }, []);
   
 
+  /** Fetch the list of prompts from the backend */
   const fetchPrompts = async () => {
-      try {
-        const result = await listPrompts();
-        if (result && Array.isArray(result.prompts)) {
-          setPrompts(result.prompts);
-        } else if (Array.isArray(result)) {
-          setPrompts(result);
-        } else {
-          throw new Error("Unexpected response structure");
-        }
-      } catch {
-        toast({
-          title: "Error",
-          description: "Failed to fetch prompts. Please try again.",
-          variant: "destructive",
-        });
-      }
-    };
-    
-  
+    console.log('fetchPrompts -> Called');
+    try {
+      const result = await listPrompts();
+      console.log('fetchPrompts -> result:', result);
 
+      // If result has a .prompts array, set that
+      if (result && Array.isArray(result.prompts)) {
+        setPrompts(result.prompts);
+      }
+      // If result is just an array, set that
+      else if (Array.isArray(result)) {
+        setPrompts(result);
+      }
+      // Otherwise, throw an error for unexpected structure
+      else {
+        throw new Error('Unexpected response structure');
+      }
+    } catch (err) {
+      console.error('fetchPrompts -> error:', err);
+      toast({
+        title: 'Error',
+        description: 'Failed to fetch prompts. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  /** Manually triggered on form submission (RHForm) */
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
+    console.log('onSubmit -> Called with data:', data);
     setIsLoading(true);
-    console.log("Submitting processing request with data:", data);  // Debug log
-  
+
     try {
       let apiKey = '';
       if (data.provider_choice === 'OpenAI') {
@@ -124,10 +148,10 @@ export default function ProcessingPage() {
       } else if (data.provider_choice === 'Gemini') {
         apiKey = geminiApiKey;
       }
-  
+
       const settings: ProcessingSettings = {
         provider_choice: data.provider_choice,
-        prompt: data.prompt,
+        prompt: (await loadPrompt(data.prompt)).content,
         chunk_size: data.chunk_size,
         chunk_by: data.chunk_by,
         selected_model: data.selected_model,
@@ -136,45 +160,50 @@ export default function ProcessingPage() {
         anthropic_api_key: data.provider_choice === 'Anthropic' ? apiKey : '',
         gemini_api_key: data.provider_choice === 'Gemini' ? apiKey : '',
       };
-  
-      console.log("Settings being sent:", settings);  // Debug log
-  
+
+      console.log('onSubmit -> Final settings to be sent:', settings);
+
       const response = await startProcessing(settings);
-      console.log("Received response:", response);  // Debug log
-  
+      console.log('onSubmit -> Received response:', response);
+
       setTaskId(response.task_id);
       toast({
-        title: "Processing started",
+        title: 'Processing started',
         description: `Task ID: ${response.task_id}`,
       });
     } catch (error: unknown) {
-      console.error("Error starting processing:", error);  // Log error details
+      console.error('onSubmit -> Error starting processing:', error);
       toast({
-        title: "Error",
-        description: (error as Error).message || "Failed to start processing. Please try again.",
-        variant: "destructive",
+        title: 'Error',
+        description: (error as Error).message || 'Failed to start processing. Please try again.',
+        variant: 'destructive',
       });
     } finally {
       setIsLoading(false);
     }
   };
-  const checkTaskStatus = async () => {
-    if (!taskId) return
 
-    setIsLoading(true)
+  /** Check Task Status Handler */
+  const checkTaskStatus = async () => {
+    if (!taskId) return;
+    console.log('checkTaskStatus -> Called, taskId:', taskId);
+
+    setIsLoading(true);
     try {
-      const status = await getTaskStatus(taskId)
-      setTaskStatus(status)
-    } catch(error: unknown) {
+      const status = await getTaskStatus(taskId);
+      console.log('checkTaskStatus -> Received status:', status);
+      setTaskStatus(status);
+    } catch (error: unknown) {
+      console.error('checkTaskStatus -> Error:', error);
       toast({
-        title: "Error",
-        description: (error as Error).message || "Failed to fetch task status. Please try again.",
-        variant: "destructive",
-      })
+        title: 'Error',
+        description: (error as Error).message || 'Failed to fetch task status. Please try again.',
+        variant: 'destructive',
+      });
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <div className="container mx-auto py-10 space-y-8">
@@ -188,7 +217,8 @@ export default function ProcessingPage() {
         </CardHeader>
         <CardContent className="p-6">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            {/* Use an explicit onClick instead of <form onSubmit=...> */}
+            <div className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
@@ -233,7 +263,9 @@ export default function ProcessingPage() {
                         </FormControl>
                         <SelectContent>
                           {modelOptions[providerChoice]?.map((model) => (
-                            <SelectItem key={model} value={model}>{model}</SelectItem>
+                            <SelectItem key={model} value={model}>
+                              {model}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
@@ -260,7 +292,9 @@ export default function ProcessingPage() {
                       </FormControl>
                       <SelectContent>
                         {prompts.map((prompt) => (
-                          <SelectItem key={prompt} value={prompt}>{prompt}</SelectItem>
+                          <SelectItem key={prompt} value={prompt}>
+                            {prompt}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -341,12 +375,12 @@ export default function ProcessingPage() {
                         <div className="relative">
                           <Input
                             {...field}
-                            type={showApiKey ? "text" : "password"}
+                            type={showApiKey ? 'text' : 'password'}
                             placeholder="Enter OpenAI API Key"
                             value={openaiApiKey}
                             onChange={(e) => {
-                              setOpenaiApiKey(e.target.value)
-                              field.onChange(e.target.value)
+                              setOpenaiApiKey(e.target.value);
+                              field.onChange(e.target.value);
                             }}
                             className="pr-10"
                           />
@@ -377,12 +411,12 @@ export default function ProcessingPage() {
                         <div className="relative">
                           <Input
                             {...field}
-                            type={showApiKey ? "text" : "password"}
+                            type={showApiKey ? 'text' : 'password'}
                             placeholder="Enter Anthropic API Key"
                             value={anthropicApiKey}
                             onChange={(e) => {
-                              setAnthropicApiKey(e.target.value)
-                              field.onChange(e.target.value)
+                              setAnthropicApiKey(e.target.value);
+                              field.onChange(e.target.value);
                             }}
                             className="pr-10"
                           />
@@ -413,12 +447,12 @@ export default function ProcessingPage() {
                         <div className="relative">
                           <Input
                             {...field}
-                            type={showApiKey ? "text" : "password"}
+                            type={showApiKey ? 'text' : 'password'}
                             placeholder="Enter Gemini API Key"
                             value={geminiApiKey}
                             onChange={(e) => {
-                              setGeminiApiKey(e.target.value)
-                              field.onChange(e.target.value)
+                              setGeminiApiKey(e.target.value);
+                              field.onChange(e.target.value);
                             }}
                             className="pr-10"
                           />
@@ -438,15 +472,35 @@ export default function ProcessingPage() {
                 />
               )}
 
-              <Button type="submit" disabled={isLoading} className="w-full">
+              {/* Instead of type="submit", explicitly handle clicks for debugging */}
+              <Button
+                onClick={() => {
+                  console.log("Start Processing button clicked");
+                  form.handleSubmit(
+                    (data) => {
+                      // Valid data path
+                      console.log("Valid data callback called with:", data);
+                      onSubmit(data);
+                    },
+                    (errors) => {
+                      // Invalid data path
+                      console.log("Invalid data callback called with errors:", errors);
+                    }
+                  )();
+                }}
+                disabled={isLoading}
+                className="w-full"
+              >
                 {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
                 Start Processing
               </Button>
-            </form>
+
+            </div>
           </Form>
         </CardContent>
       </Card>
 
+      {/* Task Status Section */}
       {taskId && (
         <Card className="w-full max-w-4xl mx-auto">
           <CardHeader className="bg-secondary/10 rounded-t-lg">
@@ -457,21 +511,30 @@ export default function ProcessingPage() {
             <CardDescription>Check the status of your processing task.</CardDescription>
           </CardHeader>
           <CardContent className="p-6">
-            <p className="text-lg font-medium">Task ID: <span className="text-primary">{taskId}</span></p>
+            <p className="text-lg font-medium">
+              Task ID: <span className="text-primary">{taskId}</span>
+            </p>
             {taskStatus && (
               <div className="mt-4">
-                <p className="text-lg">Status: <span className="font-semibold text-secondary">{taskStatus.status}</span></p>
+                <p className="text-lg">
+                  Status:{" "}
+                  <span className="font-semibold text-secondary">{taskStatus.status}</span>
+                </p>
               </div>
             )}
           </CardContent>
           <CardFooter className="bg-secondary/5 rounded-b-lg">
             <Button onClick={checkTaskStatus} disabled={isLoading} className="w-full">
-              {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+              {isLoading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
               Check Status
             </Button>
           </CardFooter>
         </Card>
       )}
     </div>
-  )
+  );
 }

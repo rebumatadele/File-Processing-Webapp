@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';  // Import useRouter
 import {
   Settings,
   MessageSquare,
@@ -40,21 +40,38 @@ export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const pathname = usePathname();
+  const router = useRouter(); // Initialize router
   const { toast } = useToast();
 
-  // Check authentication status on component mount
+  // Initialize auth state on mount and listen for auth changes
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    setIsLoggedIn(!!token);
+    const updateAuthState = () => {
+      const token = localStorage.getItem('access_token');
+      setIsLoggedIn(!!token);
+    };
+
+    updateAuthState();
+
+    // Listen for our custom event to update auth status
+    window.addEventListener('authChange', updateAuthState);
+
+    // Cleanup listener on unmount
+    return () => {
+      window.removeEventListener('authChange', updateAuthState);
+    };
   }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
     setIsLoggedIn(false);
+    window.dispatchEvent(new Event('authChange')); // Notify others of auth change
+
     toast({
       title: 'Success',
       description: 'Logged out successfully',
     });
+
+    router.push('/'); // Redirect to home page after logout
   };
 
   const AuthButton = () =>

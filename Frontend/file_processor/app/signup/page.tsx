@@ -1,4 +1,4 @@
-"use client";
+'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation'; // Use next/navigation for App Router
 import Link from 'next/link';
@@ -12,6 +12,7 @@ export default function SignupPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false); // Loader state
   const { toast } = useToast();
   const router = useRouter();
 
@@ -25,6 +26,9 @@ export default function SignupPage() {
       });
       return;
     }
+
+    setIsLoading(true); // Start loader
+
     try {
       await axiosInstance.post('/auth/signup', {
         email,
@@ -36,15 +40,18 @@ export default function SignupPage() {
         description: 'Signed up successfully. Please log in.',
       });
 
-      // Redirect to login page
       router.push('/login');
     } catch (error) {
-      const errorMessage = (error as { response?: { data?: { detail?: string } } }).response?.data?.detail || 'Signup failed';
+      const errorMessage =
+        (error as { response?: { data?: { detail?: string } } })
+          .response?.data?.detail || 'Signup failed';
       toast({
         title: 'Error',
         description: errorMessage,
         variant: 'destructive',
       });
+    } finally {
+      setIsLoading(false); // Stop loader
     }
   };
 
@@ -82,7 +89,9 @@ export default function SignupPage() {
             required
           />
         </div>
-        <Button type="submit">Sign Up</Button>
+        <Button type="submit" disabled={isLoading}>
+          {isLoading ? 'Signing Up...' : 'Sign Up'}
+        </Button>
       </form>
       <p className="text-sm mt-2">
         Already have an account?{' '}
