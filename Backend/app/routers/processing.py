@@ -66,12 +66,30 @@ async def process_texts_task(task_id: str, settings: ProcessingSettings, user_id
             user_task_status[user_id][task_id] = "Failed: No uploaded files."
             return
 
+        # After retrieving uploaded files and before filtering
+        print(f"Uploaded files on server: {uploaded_files}")
+        print(f"Files selected by user: {settings.files}")
+        
         # If specific files are selected in settings, filter the uploaded files
         if settings.files:
-            # Only process files that are both uploaded and selected
-            uploaded_files = [f for f in uploaded_files if f in settings.files]
+            # Normalize the selected file names from settings: lowercase and remove '.txt'
+            selected_normalized = set(f.lower().replace('.txt', '') for f in settings.files or [])
+
+            filtered_files = []
+            for f in uploaded_files:
+                # Normalize each uploaded file name similarly
+                normalized_name = f.lower().replace('.txt', '')
+                if normalized_name in selected_normalized:
+                    filtered_files.append(f)
+
+            uploaded_files = filtered_files
+
             if not uploaded_files:
-                handle_error("ProcessingError", "No matching uploaded files found for the selected files.", user_id=user_id)
+                handle_error(
+                    "ProcessingError",
+                    "No matching uploaded files found for the selected files.",
+                    user_id=user_id
+                )
                 user_task_status[user_id][task_id] = "Failed: Selected files not found."
                 return
 
