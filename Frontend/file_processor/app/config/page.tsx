@@ -116,6 +116,7 @@ export default function ConfigurationPage() {
 
   const onSubmit = async (data: FormValues) => {
     setIsLoading(true)
+    setIsConfigSaved(true);
 
     try {
       const configRequest: ConfigRequest = {
@@ -254,11 +255,7 @@ export default function ConfigurationPage() {
         </CardContent>
         <CardFooter className="bg-muted/10 rounded-b-lg flex justify-between">
           <Button 
-            onClick={() => {
-              setIsConfigSaved(true);
-              form.handleSubmit(onSubmit);
-            
-            }} 
+            onClick={form.handleSubmit(onSubmit)} 
             className="w-full mr-2" 
             disabled={isLoading}
           >
