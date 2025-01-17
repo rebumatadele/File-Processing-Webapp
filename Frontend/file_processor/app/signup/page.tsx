@@ -37,7 +37,7 @@ export default function SignupPage() {
 
       toast({
         title: 'Success',
-        description: 'Signed up successfully. Please log in.',
+        description: 'Signed up successfully. Please check your email to verify your account.',
       });
 
       router.push('/login');

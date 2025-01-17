@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     database_url: str = "sqlite:///./file_processor_backend_db.db"
-
+    frontend_url: str = "https://fileprocessor.netlify.app"
+    backend_url: str = "https://file-processing-webapp.onrender.com"
     model_config = {
         "env_file": ".env",  # Specifies the .env file location
         "extra": "forbid",    # Disallows extra fields not defined in the model
