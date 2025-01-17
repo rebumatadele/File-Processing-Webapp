@@ -45,6 +45,7 @@ export interface ProcessingSettings {
   chunk_by: string;
   selected_model: string;
   email: string;
+  files?: string[];  // Added optional files property
 }
 
 export interface StartProcessingResponse {

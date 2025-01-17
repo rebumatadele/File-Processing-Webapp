@@ -123,7 +123,9 @@ export default function UsagePage() {
               <p className="text-lg font-medium">
                 Uploaded Files Size:{' '}
                 {loadingFiles ? (
-                  <Skeleton className="h-4 w-24 inline-block" />
+                  <span>
+                    <Skeleton className="h-4 w-24 inline-block" />
+                  </span>
                 ) : (
                   <span className="text-primary">
                     {uploadedFilesSize !== null ? `${(uploadedFilesSize / 1024).toFixed(2)} KB` : 'N/A'}

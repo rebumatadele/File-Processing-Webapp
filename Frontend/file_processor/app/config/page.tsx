@@ -54,6 +54,7 @@ export default function ConfigurationPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [showApiKey, setShowApiKey] = useState(false)
   const { toast } = useToast()
+  const [isConfigSaved, setIsConfigSaved] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -250,15 +251,23 @@ export default function ConfigurationPage() {
             </form>
           </Form>
         </CardContent>
-        <CardFooter className="bg-muted/10 rounded-b-lg">
+        <CardFooter className="bg-muted/10 rounded-b-lg flex justify-between">
           <Button 
-            onClick={form.handleSubmit(onSubmit)} 
-            className="w-full" 
+            onClick={() => {form.handleSubmit(onSubmit); setIsConfigSaved(true)}} 
+            className="w-full mr-2" 
             disabled={isLoading}
           >
             {isLoading ? "Saving..." : "Save Configuration"}
           </Button>
+          <Button 
+            onClick={() => window.location.href = "/prompt-management"} 
+            className="w-full ml-2"
+            disabled={!isConfigSaved}
+          >
+            Next
+          </Button>
         </CardFooter>
+
       </Card>
     </div>
   )

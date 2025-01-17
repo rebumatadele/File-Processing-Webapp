@@ -224,6 +224,14 @@ export default function PromptManagementPage() {
             </Card>
           )}
         </CardContent>
+        <CardFooter className="bg-muted/10 rounded-b-lg flex justify-between">
+          <Button 
+            onClick={() => window.location.href = "/file-management"} 
+            className="w-full ml-2"
+          >
+            Next
+          </Button>
+        </CardFooter>
       </Card>
     </div>
   )

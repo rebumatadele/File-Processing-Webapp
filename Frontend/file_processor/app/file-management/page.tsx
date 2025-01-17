@@ -245,6 +245,11 @@ export default function FileManagementPage() {
             )}
             Clear All Files
           </Button>
+          <Button 
+            onClick={() => window.location.href = "/processing"} 
+          >
+            Next
+          </Button>
         </CardFooter>
       </Card>
     </div>

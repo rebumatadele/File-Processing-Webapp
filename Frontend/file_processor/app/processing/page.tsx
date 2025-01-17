@@ -9,9 +9,11 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Play, RefreshCw, Eye, EyeOff, Cpu, Zap, Mail, Layers, SplitSquareVertical } from 'lucide-react'
+import { Loader2, Play, RefreshCw, Eye, EyeOff, Cpu, Zap, Mail, Layers, SplitSquareVertical, Files } from 'lucide-react'
 import { startProcessing, getTaskStatus } from '@/api/processingUtils'
+import { listFiles } from '@/api/fileUtils'
 import { listPrompts, loadPrompt } from '@/api/promptUtils'
 import { getUserConfig } from '@/api/configUtils'
 import { ProcessingSettings, TaskStatusResponse } from '@/types/apiTypes'
@@ -27,6 +29,8 @@ const formSchema = z.object({
   openai_api_key: z.string().optional(),
   anthropic_api_key: z.string().optional(),
   gemini_api_key: z.string().optional(),
+  selected_files: z.array(z.string()).min(1, 'Please select at least one file'),  // Added field
+
 }).refine((data) => {
   if (data.provider_choice === 'OpenAI') return !!data.openai_api_key
   if (data.provider_choice === 'Anthropic') return !!data.anthropic_api_key
@@ -52,7 +56,7 @@ export default function ProcessingPage() {
   const [openaiApiKey, setOpenaiApiKey] = useState<string>('');
   const [anthropicApiKey, setAnthropicApiKey] = useState<string>('');
   const [geminiApiKey, setGeminiApiKey] = useState<string>('');
-
+  const [files, setFiles] = useState<string[]>([]);
   const { toast } = useToast();
 
   /** React Hook Form Setup */
@@ -68,6 +72,8 @@ export default function ProcessingPage() {
       openai_api_key: '',
       anthropic_api_key: '',
       gemini_api_key: '',
+      selected_files: [],  // Initialize selected_files
+
     },
   });
 
@@ -77,7 +83,8 @@ export default function ProcessingPage() {
   /** On Mount: fetch prompts & user config */
   useEffect(() => {
     fetchPrompts();
-  
+    fetchFiles();
+
     getUserConfig()
       .then((config) => {
         console.log("Fetched user config:", config);
@@ -133,6 +140,16 @@ export default function ProcessingPage() {
       });
     }
   };
+  const fetchFiles = async () => {
+    try {
+      const fileList = await listFiles();
+      setFiles(fileList);
+    } catch (err) {
+      console.error('Error fetching files:', err);
+      toast({ title: 'Error', description: 'Failed to fetch files. Please try again.', variant: 'destructive' });
+    }
+  };
+  
 
   /** Manually triggered on form submission (RHForm) */
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
@@ -159,6 +176,8 @@ export default function ProcessingPage() {
         openai_api_key: data.provider_choice === 'OpenAI' ? apiKey : '',
         anthropic_api_key: data.provider_choice === 'Anthropic' ? apiKey : '',
         gemini_api_key: data.provider_choice === 'Gemini' ? apiKey : '',
+        files: data.selected_files,  // Include selected files in settings
+
       };
 
       console.log('onSubmit -> Final settings to be sent:', settings);
@@ -298,6 +317,50 @@ export default function ProcessingPage() {
                         ))}
                       </SelectContent>
                     </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              {/* New Multi-select Dropdown for File Selection */}
+              
+              {/* New Multi-select Dropdown for File Selection */}
+              <FormField
+                control={form.control}
+                name="selected_files"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-2">
+                      <Files className="h-4 w-4" />
+                      Select Files
+                    </FormLabel>
+                    <FormControl>
+                      <div className="space-y-2 max-h-60 overflow-y-auto border rounded p-2">
+                        {files.length === 0 ? (
+                          <div className="text-sm text-muted-foreground">Loading files...</div>
+                        ) : (
+                          files.map((file) => (
+                            <div key={file} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={file}
+                                checked={field.value?.includes(file)}
+                                onCheckedChange={() => {
+                                  const updatedValue = field.value?.includes(file)
+                                    ? field.value.filter((f: string) => f !== file)
+                                    : [...(field.value || []), file]
+                                  field.onChange(updatedValue)
+                                }}
+                              />
+                              <label
+                                htmlFor={file}
+                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                              >
+                                {file}
+                              </label>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -523,7 +586,7 @@ export default function ProcessingPage() {
               </div>
             )}
           </CardContent>
-          <CardFooter className="bg-secondary/5 rounded-b-lg">
+          <CardFooter className="bg-secondary/5 rounded-b-lg justify-between">
             <Button onClick={checkTaskStatus} disabled={isLoading} className="w-full">
               {isLoading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -532,6 +595,13 @@ export default function ProcessingPage() {
               )}
               Check Status
             </Button>
+            <Button 
+              onClick={() => window.location.href = "/results"} 
+              disabled={taskStatus?.status !== "Completed"}
+              className='mx-10'
+            >
+              Next
+          </Button>
           </CardFooter>
         </Card>
       )}
