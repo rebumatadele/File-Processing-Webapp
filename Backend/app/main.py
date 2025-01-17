@@ -71,6 +71,7 @@ def keep_alive():
             requests.get("https://file-processing-webapp.onrender.com/")
             # Ping the other backend
             requests.get("https://claude-integration-service-1.onrender.com/")
+            print("Pinging successful")
         except Exception as e:
             print(f"Failed to ping: {e}")
         # Wait 5 minutes (300 seconds)
