@@ -1,5 +1,7 @@
 # app/main.py
 
+import requests
+import threading
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
@@ -62,6 +64,18 @@ def read_root():
 # Define a custom OAuth2 schema for Swagger UI
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
+def keep_alive():
+    while True:
+        try:
+            # Ping this application
+            requests.get("https://file-processing-webapp.onrender.com/")
+            # Ping the other backend
+            requests.get("https://claude-integration-service-1.onrender.com/")
+        except Exception as e:
+            print(f"Failed to ping: {e}")
+        # Wait 5 minutes (300 seconds)
+        threading.Event().wait(300)
+
 @app.on_event("startup")
 async def startup_event():
     # Create all tables
@@ -78,3 +92,6 @@ async def startup_event():
             "bearerFormat": "JWT",  # Indicate you're using a JWT token
         }
         app.openapi_schema = openapi_schema
+
+    # Start the keep-alive thread
+    threading.Thread(target=keep_alive, daemon=True).start()
