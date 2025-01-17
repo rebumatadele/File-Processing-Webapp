@@ -14,6 +14,7 @@ class ProcessingSettings(BaseModel):
     openai_api_key: Optional[str] = Field(None, description="User's OpenAI API Key")
     anthropic_api_key: Optional[str] = Field(None, description="User's Anthropic API Key")
     gemini_api_key: Optional[str] = Field(None, description="User's Gemini API Key")
+    files: Optional[List[str]] = Field(None, description="List of selected files to process")  # <-- Added field
 
     class Config:
         from_attributes = True

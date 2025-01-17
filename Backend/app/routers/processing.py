@@ -66,6 +66,15 @@ async def process_texts_task(task_id: str, settings: ProcessingSettings, user_id
             user_task_status[user_id][task_id] = "Failed: No uploaded files."
             return
 
+        # If specific files are selected in settings, filter the uploaded files
+        if settings.files:
+            # Only process files that are both uploaded and selected
+            uploaded_files = [f for f in uploaded_files if f in settings.files]
+            if not uploaded_files:
+                handle_error("ProcessingError", "No matching uploaded files found for the selected files.", user_id=user_id)
+                user_task_status[user_id][task_id] = "Failed: Selected files not found."
+                return
+
         # Prepare API keys: prioritize user-provided keys over environment variables
         api_keys = {
             "OPENAI_API_KEY": settings.openai_api_key or env_vars.get("OPENAI_API_KEY"),
