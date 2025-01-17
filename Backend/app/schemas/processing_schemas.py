@@ -1,7 +1,7 @@
 # app/schemas/processing_schemas.py
 
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
+from typing import List, Optional
 from datetime import datetime
 
 class ProcessingSettings(BaseModel):
