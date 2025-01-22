@@ -23,3 +23,4 @@ class ProcessingJob(Base):
 
     user = relationship("User", back_populates="processing_jobs")
     results = relationship("ProcessingResult", back_populates="job", cascade="all, delete-orphan")
+    file_statuses = relationship("ProcessingFileStatus", backref="job", cascade="all, delete-orphan")
