@@ -7,7 +7,7 @@ from app.providers.auth import get_current_user, get_db
 from app.schemas.user_config_schemas import UserConfigResponse, ConfigRequest
 from app.models.user_config import UserConfig
 from app.config.api_config import configure_openai, configure_anthropic, configure_gemini
-from app.utils.file_utils import handle_error
+from app.utils.error_utils import handle_error
 
 router = APIRouter(
     prefix="/config",

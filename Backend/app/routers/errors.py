@@ -2,9 +2,10 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from typing import List
+from sqlalchemy.orm import Session
 from app.models.user import User
-from app.providers.auth import get_current_user
-from app.utils.file_utils import list_errors, clear_error_logs
+from app.providers.auth import get_current_user, get_db
+from app.models.error import ErrorLog
 
 router = APIRouter(
     prefix="/errors",
@@ -12,25 +13,38 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-@router.get("/", summary="Get Error Logs", response_model=List[str])
+@router.get("/", summary="Get Error Logs")
 def get_error_logs(
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Retrieve the list of error logs for the current user.
+    Retrieve the list of error logs for the current user from the ErrorLog table.
     """
-    errors = list_errors(user_id=current_user.id)
-    return errors
+    logs = db.query(ErrorLog).filter_by(user_id=current_user.id).all()
+    # Return as needed, e.g. a list of dicts
+    return [
+        {
+            "id": log.id,
+            "timestamp": log.timestamp,
+            "error_type": log.error_type,
+            "message": log.message
+        }
+        for log in logs
+    ]
 
-@router.delete("/", summary="Clear Error Logs", response_model=dict)
+@router.delete("/", summary="Clear Error Logs")
 def clear_errors(
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    Clear all error logs for the current user.
+    Clear all error logs for the current user from the DB.
     """
     try:
-        clear_error_logs(user_id=current_user.id)
+        db.query(ErrorLog).filter_by(user_id=current_user.id).delete()
+        db.commit()
         return {"message": "Error logs cleared successfully."}
     except Exception as e:
+        db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to clear error logs: {e}")

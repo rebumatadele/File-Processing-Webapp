@@ -9,11 +9,8 @@ import httpx
 from app.models.user import User
 from app.providers.auth import get_current_user, get_db
 from app.models.claude_batch import Batch
-from app.utils.file_utils import (
-    handle_error,
-    get_uploaded_files,
-    load_uploaded_file_content,
-)
+from app.utils.error_utils import handle_error
+from app.utils.file_utils import get_uploaded_files, load_uploaded_file_content
 
 router = APIRouter(
     prefix="/processing/claude",
@@ -21,9 +18,7 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-# Point to your external Integration Service
 INTEGRATION_BASE_URL = "https://claude-integration-service-1.onrender.com"
-
 
 @router.post("/batch_start")
 async def start_batch_processing(
@@ -34,30 +29,21 @@ async def start_batch_processing(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """
-    Start a batch processing task using the external Claude Integration Service.
-    Previously, this used claude_batch_utils to talk to Anthropic directly.
-    Now it sends chunks to the Integration Service's queue.
-    """
     try:
-        # 1) Gather user's uploaded files
-        uploaded_files = get_uploaded_files(user_id=current_user.id)
+        uploaded_files = get_uploaded_files(db, current_user.id)
         if not uploaded_files:
             raise HTTPException(status_code=400, detail="No files found for batch processing.")
 
-        # 2) Chunk the text from each file
         all_chunks = []
         for file_name in uploaded_files:
-            content = load_uploaded_file_content(file_name, user_id=current_user.id)
+            content = load_uploaded_file_content(db, file_name, user_id=current_user.id)
             if not content:
-                # If file is empty or not found, skip
                 continue
 
-            # Chunk by word or character
             if chunk_by.lower() == "word":
                 words = content.split()
                 chunked = [
-                    ' '.join(words[i:i + chunk_size])
+                    " ".join(words[i:i + chunk_size])
                     for i in range(0, len(words), chunk_size)
                 ]
             elif chunk_by.lower() == "character":
@@ -66,39 +52,27 @@ async def start_batch_processing(
                     for i in range(0, len(content), chunk_size)
                 ]
             else:
-                raise HTTPException(
-                    status_code=400,
-                    detail="chunk_by must be 'word' or 'character'."
-                )
+                raise HTTPException(status_code=400, detail="chunk_by must be 'word' or 'character'.")
 
-            # Prepend prompt
             for c in chunked:
                 combined_text = f"{prompt}\n\n{c}"
-                # Priority can be 1 (or dynamic)
                 all_chunks.append({"text": combined_text, "priority": 1})
 
         if not all_chunks:
             raise HTTPException(status_code=400, detail="No valid chunks to process.")
 
-        # 3) Build JSON payload with your callback URL
         callback_url = "https://file-processing-webapp.onrender.com/processing/claude/batch_callback"
+        payload = {"chunks": all_chunks, "callback_url": callback_url}
 
-        payload = {
-            "chunks": all_chunks,
-            "callback_url": callback_url
-        }
-
-        # 4) Send to Integration Service
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.post(f"{INTEGRATION_BASE_URL}/queue/bulk", json=payload)
-            response.raise_for_status()  # Raise exception if not 2xx
+            response.raise_for_status()
             data = response.json()
 
         job_id = data.get("job_id")
         if not job_id:
             raise HTTPException(status_code=500, detail="No job_id returned from Integration Service.")
 
-        # 5) Store job_id in your local Batch table
         new_batch = Batch(
             user_id=current_user.id,
             external_batch_id=job_id,
@@ -113,10 +87,7 @@ async def start_batch_processing(
         db.commit()
         db.refresh(new_batch)
 
-        return {
-            "batch_id": job_id,
-            "message": "Batch processing started successfully via Integration Service."
-        }
+        return {"batch_id": job_id, "message": "Batch processing started successfully."}
 
     except Exception as e:
         handle_error("BatchStartError", f"Failed to start batch processing: {e}", user_id=current_user.id)

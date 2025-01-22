@@ -6,7 +6,7 @@ from email.message import EmailMessage
 from typing import List
 from pydantic import EmailStr
 from app.settings import settings
-from app.utils.file_utils import handle_error
+from app.utils.error_utils import handle_error
 from app.utils.retry_decorator import retry
 import traceback  # For detailed error logging
 

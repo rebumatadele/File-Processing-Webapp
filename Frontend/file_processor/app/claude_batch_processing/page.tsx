@@ -332,7 +332,7 @@ export default function ClaudeBatchProcessingPage() {
                       <div className="relative">
                         <Input
                           {...field}
-                          type={showApiKey ? "text" : "password"}
+                          type={showApiKey ? "text" : "text"}
                           placeholder="Enter Anthropic API Key"
                           value={anthropicApiKey}
                           onChange={(e) => {

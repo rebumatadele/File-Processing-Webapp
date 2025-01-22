@@ -230,7 +230,7 @@ export default function ConfigurationPage() {
                         <Input
                           placeholder="Enter your API key"
                           {...field}
-                          type={showApiKey ? "text" : "password"}
+                          type={showApiKey ? "text" : "text"}
                           className="pr-10"
                         />
                       </FormControl>

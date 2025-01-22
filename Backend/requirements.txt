@@ -19,3 +19,4 @@ passlib[bcrypt]
 python-jose 
 pydantic[email]
 loguru
+psycopg2

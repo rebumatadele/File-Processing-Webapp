@@ -4,7 +4,7 @@ import os
 import httpx
 from typing import Optional
 from app.utils.retry_decorator import retry
-from app.utils.file_utils import handle_error
+from app.utils.error_utils import handle_error
 
 # Attempt to import specific exceptions; fallback to generic Exception if not available
 try:

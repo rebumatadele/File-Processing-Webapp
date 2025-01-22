@@ -1,66 +1,90 @@
 # app/providers/anthropic_provider.py
 
-import os
-import errno
 import asyncio
 from curl_cffi.requests import post
-from curl_cffi.requests.exceptions import (
-    CurlError,
-    HTTPError,
-    ConnectionError,
-    Timeout
-)
+from curl_cffi.requests.exceptions import CurlError, HTTPError, ConnectionError, Timeout
 from app.utils.retry_decorator import retry
-from app.utils.file_utils import handle_error
-import json
+from app.utils.error_utils import handle_error
+from app.utils.rate_limiter import rate_limiter_instance
+from jose import JWTError
+from typing import Tuple, Dict, Any
 
-# Define the exceptions to catch
 ANTHROPIC_EXCEPTIONS = (CurlError, HTTPError, ConnectionError, Timeout)
 
 @retry(max_retries=10, initial_wait=2, backoff_factor=2, exceptions=ANTHROPIC_EXCEPTIONS)
 async def generate_with_anthropic(prompt: str, api_key: str) -> str:
     """
-    Asynchronously generates content using the Anthropic API by running the synchronous
-    `generate_with_anthropic_sync` function in a separate thread.
-
-    Args:
-        prompt (str): The input prompt for content generation.
-        api_key (str): Your Anthropic API key.
-
-    Returns:
-        str: The generated content or an error message.
+    High-level asynchronous function to call Anthropic API with rate limiting.
     """
+    await rate_limiter_instance.acquire()
+
     try:
-        # Run the synchronous function in a separate thread to avoid blocking
-        response = await asyncio.to_thread(generate_with_anthropic_sync, prompt, api_key)
+        # Synchronous call in a thread returns content, headers, and status
+        content, headers, status = await asyncio.to_thread(
+            generate_with_anthropic_sync, prompt, api_key
+        )
 
-        return response
+        # If rate limited, check for Retry-After and wait accordingly
+        if status == 429:
+            retry_after = headers.get("retry-after")
+            if retry_after:
+                try:
+                    wait_seconds = float(retry_after)
+                except ValueError:
+                    wait_seconds = 10.0  # default fallback
+                handle_error("RateLimit", f"Received 429. Waiting {wait_seconds} seconds before retry.")
+                await asyncio.sleep(wait_seconds)
+                # Optionally, retry the request once more after waiting
+                content, headers, status = await asyncio.to_thread(
+                    generate_with_anthropic_sync, prompt, api_key
+                )
 
-    except ANTHROPIC_EXCEPTIONS as e:
-        handle_error("APIError", f"Anthropic API Error: {e}")
-        raise e  # Re-raise to trigger retry
+        # Update rate limiter with new header info
+        await rate_limiter_instance.update_from_anthropic_headers(headers)
 
-    except OSError as e:
-        if e.errno == errno.ENOSPC:
-            handle_error("StorageError", "No space left on device.")
-        else:
-            handle_error("APIError", f"An OS error occurred with Anthropic: {e}")
-        raise e  # Re-raise to trigger retry
+        if status != 200:
+            raise HTTPError(f"Anthropic returned unexpected status: {status}")
+
+        return content
 
     except Exception as e:
-        handle_error("APIError", f"Failed to generate response from Anthropic: {e}")
-        raise e  # Re-raise to trigger retry
+        handle_error("APIError", f"Failed in generate_with_anthropic: {e}")
+        raise
 
-def generate_with_anthropic_sync(prompt: str, api_key: str) -> str:
+def generate_with_anthropic_sync(prompt: str, api_key: str) -> Tuple[str, Dict[str, Any], int]:
     """
-    Synchronously generates content using the Anthropic API.
+    Synchronously makes a request to Anthropic and returns (content, headers, status).
+    """
+    headers = {
+        'x-api-key': api_key,
+        'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01',
+    }
+    data = {
+        "model": "claude-2",  # change as needed
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": 1024,
+    }
 
-    Args:
-        prompt (str): The input prompt for content generation.
-        api_key (str): Your Anthropic API key.
+    response = post("https://api.anthropic.com/v1/messages", headers=headers, json=data, timeout=30)
+    status = response.status_code
 
-    Returns:
-        str: The generated content or raises an exception.
+    if status == 200:
+        try:
+            resp_json = response.json()
+            content = resp_json.get("content", "")
+            return content, response.headers, status
+        except Exception as e:
+            handle_error("APIError", f"JSON parse error: {e}")
+            return "", response.headers, status
+    else:
+        # For non-200, return empty content but still pass headers and status
+        return "", response.headers, status
+
+def validate_anthropic_api_key(api_key: str) -> bool:
+    """
+    Makes a minimal request to see if Anthropic responds with success
+    or an auth error. Returns True if the key appears valid, else False.
     """
     headers = {
         'x-api-key': api_key,
@@ -68,43 +92,18 @@ def generate_with_anthropic_sync(prompt: str, api_key: str) -> str:
         'anthropic-version': '2023-06-01',
     }
 
+    # We'll do a minimal request with a trivial prompt
     data = {
         "model": "claude-3-5-sonnet-20240620",
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": 1024,
+        "messages": [{"role": "user", "content": "Hello"}],
+        "max_tokens": 2,  # just small usage
     }
 
     try:
-        response = post('https://api.anthropic.com/v1/messages', headers=headers, json=data, timeout=30)
-
-        if response.status_code == 200:
-            response_json = response.json()
-            content = response_json.get("content")
-            print(content)
-            if content:
-                if isinstance(content, list):
-                    return "".join([item.get("text", "") for item in content if "text" in item])
-                return content
-            else:
-                handle_error("ProcessingError", "No content field in Anthropic response.")
-                raise ValueError("No content field in response.")
-        elif response.status_code == 429:
-            handle_error("APIError", "Anthropic rate limit exceeded. Please wait before retrying.")
-            raise HTTPError("Anthropic rate limit exceeded. Please wait before retrying.")
-        else:
-            error_message = response.json().get('error', {}).get('message', 'Unknown error')
-            handle_error("APIError", f"Anthropic Error: {response.status_code} - {error_message}")
-            raise HTTPError(f"Anthropic API error: {error_message}")
-    except ANTHROPIC_EXCEPTIONS as e:
-        handle_error("APIError", f"Failed to connect to Anthropic service: {e}")
-        raise e  # Re-raise to trigger retry
-    except OSError as e:
-        if e.errno == errno.ENOSPC:
-            handle_error("StorageError", "No space left on device.")
-            raise e  # Re-raise as it's a critical error
-        else:
-            handle_error("APIError", f"An OS error occurred with Anthropic: {e}")
-            raise e  # Re-raise to trigger retry
-    except Exception as e:
-        handle_error("APIError", f"An unexpected error occurred with Anthropic: {e}")
-        raise e  # Re-raise to trigger retry
+        resp = post('https://api.anthropic.com/v1/messages', headers=headers, json=data, timeout=15)
+        if resp.status_code == 200:
+            return True
+        # 401 or 403 => invalid key
+        return False
+    except Exception:
+        return False

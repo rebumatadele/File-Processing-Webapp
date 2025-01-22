@@ -438,7 +438,7 @@ export default function ProcessingPage() {
                         <div className="relative">
                           <Input
                             {...field}
-                            type={showApiKey ? 'text' : 'password'}
+                            type={showApiKey ? 'text' : 'text'}
                             placeholder="Enter OpenAI API Key"
                             value={openaiApiKey}
                             onChange={(e) => {
@@ -474,7 +474,7 @@ export default function ProcessingPage() {
                         <div className="relative">
                           <Input
                             {...field}
-                            type={showApiKey ? 'text' : 'password'}
+                            type={showApiKey ? 'text' : 'text'}
                             placeholder="Enter Anthropic API Key"
                             value={anthropicApiKey}
                             onChange={(e) => {
@@ -510,7 +510,7 @@ export default function ProcessingPage() {
                         <div className="relative">
                           <Input
                             {...field}
-                            type={showApiKey ? 'text' : 'password'}
+                            type={showApiKey ? 'text' : 'text'}
                             placeholder="Enter Gemini API Key"
                             value={geminiApiKey}
                             onChange={(e) => {

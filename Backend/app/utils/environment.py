@@ -2,7 +2,7 @@
 
 import os
 from dotenv import load_dotenv
-from app.utils.file_utils import handle_error
+from app.utils.error_utils import handle_error
 import sys
 
 def load_environment_variables():

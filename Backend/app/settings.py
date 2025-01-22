@@ -21,13 +21,19 @@ class Settings(BaseSettings):
     mail_tls: Optional[bool] = Field(False, description="Enable TLS for the mail server")
     mail_ssl: Optional[bool] = Field(True, description="Enable SSL for the mail server")
 
+    # Rate Limit Config
+    max_rpm: int = 100
+    max_rph: int = 3000
+    cooldown_period: int = 10
+    token_limit: int = 100000
+
     # Additional settings can be added here
     secret_key: str = "qwertyuioplkjhgfdsazxcvbnm"  # Use a strong, unique key
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
-    database_url: str = "sqlite:///./file_processor_backend_db.db"
-    frontend_url: str = "https://fileprocessor.netlify.app"
-    backend_url: str = "https://file-processing-webapp.onrender.com"
+    database_url: str = Field(..., env="DATABASE_URL")  
+    frontend_url: str = Field(..., env="FRONTEND_URL")
+    backend_url: str = Field(..., env="BACKEND_URL")
     model_config = {
         "env_file": ".env",  # Specifies the .env file location
         "extra": "forbid",    # Disallows extra fields not defined in the model
