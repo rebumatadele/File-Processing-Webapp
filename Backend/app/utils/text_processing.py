@@ -1,6 +1,6 @@
 # app/utils/text_processing.py
 
-from typing import List, Dict, Optional
+from typing import Callable, List, Dict, Optional
 import asyncio
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -20,11 +20,13 @@ async def process_text_stream(
     model_choice: Optional[str],
     api_keys: Dict[str, str],
     user_id: str,
-    db: Session
+    db: Session,
+    progress_callback: Optional[Callable[[], None]] = None
 ) -> List[str]:
     """
     Processes the text by chunking and sending each chunk to the selected AI provider.
     Utilizes caching (DB-based) to avoid redundant processing.
+    If 'progress_callback' is provided, it is called after each chunk is processed.
     """
     # 1) Split or chunk text
     if chunk_by == "word":
@@ -48,6 +50,9 @@ async def process_text_stream(
         if cached:
             # Use cached response
             responses.append(cached)
+            # Optionally update chunk progress here if needed
+            if progress_callback:
+                progress_callback()
             continue
 
         # Not cached → call the provider’s generate function
@@ -83,5 +88,9 @@ async def process_text_stream(
             set_cached_result(db, chunk, provider_choice, model_choice, response, user_id)
         except Exception as e:
             handle_error("CacheError", f"Failed to cache result: {e}", user_id=user_id)
+
+        # Call the progress_callback after each chunk
+        if progress_callback:
+            progress_callback()
 
     return responses
