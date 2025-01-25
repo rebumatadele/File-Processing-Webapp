@@ -62,7 +62,7 @@ async def start_processing(
             email=settings.email,
             status="in_progress",
             created_at=datetime.utcnow(),
-            completed_at=datetime.utcnow()
+            completed_at=None
         )
         db.add(new_job)
         db.commit()
@@ -306,6 +306,8 @@ async def process_single_file(
     concurrency_limit: asyncio.Semaphore
 ):
     try:
+        print(f"[ClaudeDEBUG] Start file: {file_status.filename} with chunk_by={settings.chunk_by} chunk_size={settings.chunk_size}")
+
         def on_chunk_processed():
             file_status.processed_chunks += 1
             file_status.progress_percentage = (
@@ -319,7 +321,7 @@ async def process_single_file(
         if not uploaded_file:
             handle_error("ProcessingError", f"Uploaded file '{file_status.filename}' not found.", user_id=file_status.user_id)
             print(f"[ClaudeDEBUG] Uploaded file '{file_status.filename}' not found in DB.")
-            return Exception(f"Uploaded file '{file_status.filename}' not found.")
+            raise Exception(f"Uploaded file '{file_status.filename}' not found.")
 
         uploaded_file_id = uploaded_file.id
 
@@ -339,17 +341,24 @@ async def process_single_file(
 
         print(f"[ClaudeDEBUG] Done processing chunks for {file_status.filename}, # responses={len(responses)}")
 
-         # Extract text from each response dictionary
+        # Extract text from each response dictionary
         extracted_texts = []
         for resp in responses:
-            if isinstance(resp, dict) and 'text' in resp:
-                extracted_texts.append(resp['text'])
+            if isinstance(resp, dict):
+                # Assuming 'text' is directly under the response dictionary
+                text = resp.get('text', '')
+                if text:
+                    extracted_texts.append(text)
+                else:
+                    # Handle unexpected response format
+                    handle_error("ProcessingError", f"No 'text' field in response: {resp}", user_id=file_status.user_id)
+                    print(f"[ClaudeDEBUG] No 'text' field in response: {resp}")
             elif isinstance(resp, str):
                 extracted_texts.append(resp)
             else:
-                # Handle unexpected response format
-                handle_error("ProcessingError", f"Unexpected response format: {resp}", user_id=file_status.user_id)
-                print(f"[ClaudeDEBUG] Unexpected response format: {resp}")
+                # Handle unexpected response type
+                handle_error("ProcessingError", f"Unexpected response type: {type(resp)}", user_id=file_status.user_id)
+                print(f"[ClaudeDEBUG] Unexpected response type: {type(resp)}")
 
         # Join the extracted texts
         merged_text = "\n".join(extracted_texts)
@@ -372,9 +381,7 @@ async def process_single_file(
         db.commit()
         print(f"[ClaudeDEBUG] Exception in process_single_file({file_status.filename}): {e}")
         handle_error("ProcessingError", f"File '{file_status.filename}' failed: {e}", user_id=file_status.user_id)
-        return e
-
-
+        raise e
 @router.get("/status/{task_id}", summary="Get Task Status")
 def get_task_status_endpoint(
     task_id: str,

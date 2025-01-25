@@ -6,7 +6,6 @@ from curl_cffi.requests.exceptions import CurlError, HTTPError, ConnectionError,
 from app.utils.retry_decorator import retry
 from app.utils.error_utils import handle_error
 from app.utils.rate_limiter import rate_limiter_instance
-from jose import JWTError
 from typing import Tuple, Dict, Any
 
 ANTHROPIC_EXCEPTIONS = (CurlError, HTTPError, ConnectionError, Timeout)
@@ -15,7 +14,7 @@ ANTHROPIC_EXCEPTIONS = (CurlError, HTTPError, ConnectionError, Timeout)
 async def generate_with_anthropic(prompt: str, api_key: str, model_choice: str) -> str:
     """
     High-level asynchronous function to call Anthropic API with rate limiting.
-    Added debug prints to confirm what's happening.
+    Returns the concatenated text from the response.
     """
     await rate_limiter_instance.acquire()
 
@@ -56,6 +55,7 @@ async def generate_with_anthropic(prompt: str, api_key: str, model_choice: str) 
         await rate_limiter_instance.update_from_anthropic_headers(headers)
 
         if status != 200:
+            handle_error("APIError", f"Anthropic returned unexpected status: {status}")
             raise HTTPError(f"Anthropic returned unexpected status: {status}")
 
         print("[Anthropic] Done. Returning content of length", len(content))
@@ -69,6 +69,7 @@ async def generate_with_anthropic(prompt: str, api_key: str, model_choice: str) 
 def generate_with_anthropic_sync(prompt: str, api_key: str, model_choice: str) -> Tuple[str, Dict[str, Any], int]:
     """
     Synchronously makes a request to Anthropic and returns (content, headers, status).
+    Extracts and concatenates 'text' fields from the 'content' list.
     """
     headers = {
         'x-api-key': api_key,
@@ -88,7 +89,7 @@ def generate_with_anthropic_sync(prompt: str, api_key: str, model_choice: str) -
             "https://api.anthropic.com/v1/messages",
             headers=headers,
             json=data,
-            timeout=60  # 60-second timeout, in case 30 was too short
+            timeout=60  # 60-second timeout
         )
     except Exception as ex:
         print("[AnthropicSync] Hard exception from post():", ex)
@@ -98,14 +99,32 @@ def generate_with_anthropic_sync(prompt: str, api_key: str, model_choice: str) -
     if status == 200:
         try:
             resp_json = response.json()
-            # Some Anthropic responses have "completion" or "content" field
-            content = resp_json.get("completion") or resp_json.get("content") or ""
+            # Extract 'text' from each item in 'content' list
+            content_list = resp_json.get("content", [])
+            if isinstance(content_list, list):
+                texts = [
+                    item.get("text", "") 
+                    for item in content_list 
+                    if isinstance(item, dict) and 'text' in item
+                ]
+                content = "\n".join(texts)  # Concatenate texts with newline separators
+            elif isinstance(content_list, str):
+                # In case 'content' is a single string
+                content = content_list
+            else:
+                # Unexpected format
+                content = ""
+                handle_error("APIError", f"Unexpected 'content' format: {content_list}")
+                print(f"[AnthropicSync] Unexpected 'content' format: {content_list}")
             return content, response.headers, status
         except Exception as e:
             handle_error("APIError", f"JSON parse error: {e}")
+            print(f"[AnthropicSync] JSON parse error: {e}")
             return "", response.headers, status
     else:
         # For non-200, return empty content but still pass headers/status
+        handle_error("APIError", f"Anthropic returned status: {status}")
+        print(f"[AnthropicSync] Non-200 status received: {status}")
         return "", response.headers, status
 
 def validate_anthropic_api_key(api_key: str) -> bool:
@@ -131,5 +150,6 @@ def validate_anthropic_api_key(api_key: str) -> bool:
         # 401 or 403 => invalid key
         print("Invalid API Key")
         return False
-    except Exception:
+    except Exception as e:
+        print(f"[AnthropicSync] Exception during API key validation: {e}")
         return False
