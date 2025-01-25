@@ -306,8 +306,6 @@ async def process_single_file(
     concurrency_limit: asyncio.Semaphore
 ):
     try:
-        print(f"[ClaudeDEBUG] Start file: {file_status.filename} with chunk_by={settings.chunk_by} chunk_size={settings.chunk_size}")
-
         def on_chunk_processed():
             file_status.processed_chunks += 1
             file_status.progress_percentage = (
@@ -341,7 +339,22 @@ async def process_single_file(
 
         print(f"[ClaudeDEBUG] Done processing chunks for {file_status.filename}, # responses={len(responses)}")
 
-        merged_text = "\n".join(responses)
+         # Extract text from each response dictionary
+        extracted_texts = []
+        for resp in responses:
+            if isinstance(resp, dict) and 'text' in resp:
+                extracted_texts.append(resp['text'])
+            elif isinstance(resp, str):
+                extracted_texts.append(resp)
+            else:
+                # Handle unexpected response format
+                handle_error("ProcessingError", f"Unexpected response format: {resp}", user_id=file_status.user_id)
+                print(f"[ClaudeDEBUG] Unexpected response format: {resp}")
+
+        # Join the extracted texts
+        merged_text = "\n".join(extracted_texts)
+
+        # Save the processed result
         save_processed_result(db, file_status.filename, merged_text, uploaded_file_id)  # Pass uploaded_file_id
 
         file_status.status = "completed"
@@ -351,6 +364,7 @@ async def process_single_file(
 
         print(f"[ClaudeDEBUG] Completed {file_status.filename}")
         return f"Success: {file_status.filename}"
+
 
     except Exception as e:
         file_status.status = "failed"
