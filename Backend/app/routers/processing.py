@@ -62,7 +62,7 @@ async def start_processing(
             email=settings.email,
             status="in_progress",
             created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            completed_at=datetime.utcnow()
         )
         db.add(new_job)
         db.commit()
