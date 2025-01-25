@@ -3,10 +3,11 @@ import asyncio
 import secrets
 import os
 from typing import List, Dict
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends
+from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from datetime import datetime
 
+from app.models.file import UploadedFile
 from app.dependencies.database import get_db
 from app.models.user import User
 from app.models.processing import ProcessingJob
@@ -28,22 +29,25 @@ router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
-# (Optional) In-memory dictionary if you still want high-level job status per user
-user_task_status: Dict[str, Dict[str, str]] = {}  # user_id -> {task_id -> "status"}
+# In-memory dictionary: user_id -> {task_id -> "status_string"}
+user_task_status: Dict[str, Dict[str, str]] = {}
+
+# Optional: keep track of the active asyncio tasks themselves
+active_tasks: Dict[str, "asyncio.Task"] = {}
+
 
 @router.post("/start", summary="Start Text Processing")
 async def start_processing(
     settings: ProcessingSettings,
-    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
-    Start processing in a background task, returning a `task_id`.
-    We'll also create a ProcessingJob DB entry and link files to that job.
+    POST endpoint to start an async background job. 
+    Returns a `task_id` so the frontend can poll /processing/status/{task_id}.
     """
     try:
-        # 1) Create a new job row in DB so we can track overall progress
+        # 1) Create a new job row in DB to track overall progress
         new_job = ProcessingJob(
             user_id=current_user.id,
             provider_choice=settings.provider_choice,
@@ -58,20 +62,24 @@ async def start_processing(
         db.commit()
         db.refresh(new_job)
 
-        # 2) Create a unique background "task_id" as before (optional)
+        # 2) Generate a unique task_id
         task_id = f"task_{int(time.time())}_{secrets.token_hex(4)}"
+
+        # 3) Track high-level status in memory
         if current_user.id not in user_task_status:
             user_task_status[current_user.id] = {}
         user_task_status[current_user.id][task_id] = "Processing"
 
-        # 3) Launch background task
-        background_tasks.add_task(
-            process_texts_task,
-            task_id,
-            new_job.id,        # <-- pass job_id to link DB updates
-            settings,
-            current_user.id
+        # 4) Launch an actual async task using asyncio.create_task
+        task = asyncio.create_task(
+            process_texts_task(
+                task_id=task_id,
+                job_id=new_job.id,
+                settings=settings,
+                user_id=current_user.id
+            )
         )
+        active_tasks[task_id] = task
 
         return {
             "task_id": task_id,
@@ -86,16 +94,17 @@ async def start_processing(
 
 async def process_texts_task(task_id: str, job_id: str, settings: ProcessingSettings, user_id: str):
     """
-    Background task that:
-    1) Loads user files (filtered if needed),
-    2) For each file, creates a ProcessingFileStatus row,
-    3) Processes chunks via process_text_stream,
-    4) Updates chunk-level progress in the DB,
-    5) Optionally emails results,
-    6) Marks job as completed when done.
+    **Async** background routine:
+      1) Looks up the job & files in DB
+      2) Creates a ProcessingFileStatus entry per file
+      3) Splits text into chunks and calls `process_text_stream` 
+      4) Updates DB after each chunk
+      5) Marks job as completed or failed
     """
     from app.config.database import SessionLocal
     db: Session = SessionLocal()
+
+    print("Inside the process_task, Line One")
 
     try:
         # A) Validate we have a valid job
@@ -106,7 +115,7 @@ async def process_texts_task(task_id: str, job_id: str, settings: ProcessingSett
             db.close()
             return
 
-        # B) Get list of uploaded files
+        # B) Get user-uploaded files
         uploaded_files = get_uploaded_files(db, user_id)
         if not uploaded_files:
             handle_error("ProcessingError", "No uploaded files found.", user_id=user_id)
@@ -118,7 +127,6 @@ async def process_texts_task(task_id: str, job_id: str, settings: ProcessingSett
 
         # C) Filter by `settings.files` if user selected specific ones
         if settings.files:
-            # Remove ".txt" extension and compare ignoring case
             selected_lower = {f.lower().replace(".txt", "") for f in settings.files}
             filtered = []
             for f in uploaded_files:
@@ -128,62 +136,57 @@ async def process_texts_task(task_id: str, job_id: str, settings: ProcessingSett
             uploaded_files = filtered
             if not uploaded_files:
                 handle_error("ProcessingError", "Selected files not found or empty list.", user_id=user_id)
-                user_task_status[user_id][task_id] = "Failed: Selected files not found."
+                user_task_status[user_id][task_id] = "Failed: No matching files."
                 job.status = "failed"
                 db.commit()
                 db.close()
                 return
 
-        # D) Merge environment or user-provided keys
-        db_env_vars = os.environ
+        # D) Get or merge API keys
+        env_vars = os.environ
         api_keys = {
-            "OPENAI_API_KEY": settings.openai_api_key or db_env_vars.get("OPENAI_API_KEY"),
-            "ANTHROPIC_API_KEY": settings.anthropic_api_key or db_env_vars.get("ANTHROPIC_API_KEY"),
-            "GEMINI_API_KEY": settings.gemini_api_key or db_env_vars.get("GEMINI_API_KEY"),
+            "OPENAI_API_KEY": settings.openai_api_key or env_vars.get("OPENAI_API_KEY"),
+            "ANTHROPIC_API_KEY": settings.anthropic_api_key or env_vars.get("ANTHROPIC_API_KEY"),
+            "GEMINI_API_KEY": settings.gemini_api_key or env_vars.get("GEMINI_API_KEY"),
         }
 
         # E) Validate provider key
         provider = settings.provider_choice.lower()
         if provider == "openai" and not api_keys["OPENAI_API_KEY"]:
-            handle_error("ConfigurationError", "OpenAI API key not provided.", user_id=user_id)
+            handle_error("ConfigError", "OpenAI key missing", user_id=user_id)
             user_task_status[user_id][task_id] = "Failed: Missing OpenAI key."
             job.status = "failed"
             db.commit()
             db.close()
             return
         elif provider == "anthropic" and not api_keys["ANTHROPIC_API_KEY"]:
-            handle_error("ConfigurationError", "Anthropic API key not provided.", user_id=user_id)
+            handle_error("ConfigError", "Anthropic key missing", user_id=user_id)
             user_task_status[user_id][task_id] = "Failed: Missing Anthropic key."
             job.status = "failed"
             db.commit()
             db.close()
             return
         elif provider == "gemini" and not api_keys["GEMINI_API_KEY"]:
-            handle_error("ConfigurationError", "Gemini API key not provided.", user_id=user_id)
+            handle_error("ConfigError", "Gemini key missing", user_id=user_id)
             user_task_status[user_id][task_id] = "Failed: Missing Gemini key."
             job.status = "failed"
             db.commit()
             db.close()
             return
 
-        # F) Prepare concurrency
-        semaphore = asyncio.Semaphore(5)
+        print("Inside the process_task, Line Two")
 
-        # G) For each file, create a ProcessingFileStatus row, then process
+        # F) Process each file concurrently, but limit concurrency 
+        concurrency_limit = asyncio.Semaphore(5)
         tasks = []
+
         for filename in uploaded_files:
-            # Let’s do a quick check if we can load content
             content = load_uploaded_file_content(db, filename, user_id)
             if not content:
                 handle_error("ProcessingError", f"File '{filename}' is empty or missing.", user_id=user_id)
                 continue
 
-            # We want to figure out how many chunks the text will produce
-            # We'll do a "dry run" of chunking by reusing the same logic from process_text_stream
-            # or we can do it ourselves. For simplicity, let's do a small helper:
             total_chunks = estimate_chunk_count(content, settings.chunk_size, settings.chunk_by)
-
-            # Create a status row in DB
             file_status = ProcessingFileStatus(
                 job_id=job_id,
                 user_id=user_id,
@@ -201,25 +204,41 @@ async def process_texts_task(task_id: str, job_id: str, settings: ProcessingSett
 
             tasks.append(
                 process_single_file(
-                    db, file_status, content, settings, api_keys
+                    db=db,
+                    file_status=file_status,
+                    content=content,
+                    settings=settings,
+                    api_keys=api_keys,
+                    concurrency_limit=concurrency_limit
                 )
             )
 
-        # H) Run all file tasks concurrently
-        await asyncio.gather(*tasks)
+        # G) Use return_exceptions=True to catch all exceptions (instead of raising immediately).
+        print("About to gather tasks...")
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # I) If we got here, mark job completed (or partially completed)
+        print("Inside the process_task, Line three")
+        print("Gather results:", results)
+
+        # Check if any of the results were exceptions
+        for i, res in enumerate(results):
+            if isinstance(res, Exception):
+                print(f"Task {i} had an exception: {res}")
+
+        # H) If you want to mark the entire job "failed" if any file fails,
+        #    you'd check the results list for an Exception. For now, we mark
+        #    the job "completed" no matter what.
         job.status = "completed"
         job.completed_at = datetime.utcnow()
         db.commit()
 
-        # J) Update in-memory dictionary as well (optional)
         user_task_status[user_id][task_id] = "Completed"
         db.close()
 
     except Exception as e:
-        handle_error("ProcessingError", f"Background task {task_id} failed: {e}", user_id=user_id)
+        # If *any* unhandled exception occurs, mark job as failed in DB + in-memory
         user_task_status[user_id][task_id] = f"Failed: {e}"
+        handle_error("ProcessingError", f"Job {job_id} background task failed: {e}", user_id=user_id)
         db.close()
 
 
@@ -228,17 +247,13 @@ async def process_single_file(
     file_status: ProcessingFileStatus,
     content: str,
     settings: ProcessingSettings,
-    api_keys: Dict[str, str]
+    api_keys: Dict[str, str],
+    concurrency_limit: asyncio.Semaphore
 ):
-    """
-    Processes one file chunk-by-chunk via process_text_stream.
-    Updates chunk progress in ProcessingFileStatus.
-    Optionally sends an email with results.
-    """
     try:
-        # We can pass a callback to process_text_stream that updates the DB
+        print(f"[ClaudeDEBUG] Start file: {file_status.filename} with chunk_by={settings.chunk_by} chunk_size={settings.chunk_size}")
+
         def on_chunk_processed():
-            # This callback is called after each chunk is done
             file_status.processed_chunks += 1
             file_status.progress_percentage = (
                 file_status.processed_chunks / file_status.total_chunks * 100.0
@@ -246,51 +261,61 @@ async def process_single_file(
             file_status.updated_at = datetime.utcnow()
             db.commit()
 
-        responses = await process_text_stream(
-            text=content,
-            provider_choice=settings.provider_choice,
-            prompt=settings.prompt,
-            chunk_size=settings.chunk_size,
-            chunk_by=settings.chunk_by,
-            model_choice=settings.selected_model,
-            api_keys=api_keys,
-            user_id=file_status.user_id,
-            db=db,
-            progress_callback=on_chunk_processed  # <-- pass callback
-        )
-        merged_text = "\n".join(responses)
-        save_processed_result(db, file_status.filename, merged_text, file_status.user_id)
+        # Retrieve uploaded_file_id based on filename and user_id
+        uploaded_file = db.query(UploadedFile).filter_by(filename=file_status.filename, user_id=file_status.user_id).first()
+        if not uploaded_file:
+            handle_error("ProcessingError", f"Uploaded file '{file_status.filename}' not found.", user_id=file_status.user_id)
+            print(f"[ClaudeDEBUG] Uploaded file '{file_status.filename}' not found in DB.")
+            return Exception(f"Uploaded file '{file_status.filename}' not found.")
 
-        # If user wants an email:
+        uploaded_file_id = uploaded_file.id
+
+        async with concurrency_limit:
+            responses = await process_text_stream(
+                text=content,
+                provider_choice=settings.provider_choice,
+                prompt=settings.prompt,
+                chunk_size=settings.chunk_size,
+                chunk_by=settings.chunk_by,
+                model_choice=settings.selected_model,
+                api_keys=api_keys,
+                user_id=file_status.user_id,
+                db=db,
+                progress_callback=on_chunk_processed
+            )
+
+        print(f"[ClaudeDEBUG] Done processing chunks for {file_status.filename}, # responses={len(responses)}")
+
+        merged_text = "\n".join(responses)
+        save_processed_result(db, file_status.filename, merged_text, uploaded_file_id)  # Pass uploaded_file_id
+
         if settings.email:
-            email_subject = f"Your Processed File: {file_status.filename}"
-            email_body = f"""
+            subject = f"Your Processed File: {file_status.filename}"
+            body = f"""
             <p>Hello,</p>
             <p>Your file <strong>{file_status.filename}</strong> has been processed successfully.</p>
-            <p>Best regards,<br/>Text Processor Team</p>
+            <p>Regards,<br/>Text Processor Team</p>
             """
             try:
-                await send_email(
-                    subject=email_subject,
-                    recipients=[settings.email],
-                    body=email_body
-                )
+                await send_email(subject, [settings.email], body)
             except Exception as ex:
-                handle_error("EmailError", f"Failed sending email for '{file_status.filename}': {ex}",
-                             user_id=file_status.user_id)
+                handle_error("EmailError", f"Failed to send email: {ex}", user_id=file_status.user_id)
 
-        # Mark file status as completed
         file_status.status = "completed"
         file_status.progress_percentage = 100.0
         file_status.updated_at = datetime.utcnow()
         db.commit()
 
+        print(f"[ClaudeDEBUG] Completed {file_status.filename}")
+        return f"Success: {file_status.filename}"
+
     except Exception as e:
         file_status.status = "failed"
         file_status.updated_at = datetime.utcnow()
         db.commit()
-        handle_error("ProcessingError", f"Failed to process file '{file_status.filename}': {e}",
-                     user_id=file_status.user_id)
+        print(f"[ClaudeDEBUG] Exception in process_single_file({file_status.filename}): {e}")
+        handle_error("ProcessingError", f"File '{file_status.filename}' failed: {e}", user_id=file_status.user_id)
+        return e
 
 
 @router.get("/status/{task_id}", summary="Get Task Status")
@@ -299,8 +324,8 @@ def get_task_status_endpoint(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Returns the high-level status from the in-memory dictionary (e.g. "Processing", "Completed").
-    For detailed per-file progress, see GET /processing/progress/{job_id}.
+    Returns the high-level status from the in-memory dictionary (e.g. 
+    "Processing", "Completed", or "Failed: ...").
     """
     tasks_for_user = user_task_status.get(current_user.id, {})
     status = tasks_for_user.get(task_id)
@@ -317,14 +342,12 @@ def get_processing_progress(
 ):
     """
     Returns a list of ProcessingFileStatus rows for the given job_id,
-    so the frontend can display per-file progress bars, charts, etc.
+    so the frontend can display per-file progress bars, etc.
     """
-    # Check the main job
     job = db.query(ProcessingJob).filter_by(id=job_id, user_id=current_user.id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found.")
 
-    # Get each file's status
     file_statuses = db.query(ProcessingFileStatus).filter_by(job_id=job_id, user_id=current_user.id).all()
     data = []
     for fs in file_statuses:
@@ -344,7 +367,10 @@ def get_processing_progress(
 
 
 def estimate_chunk_count(text: str, chunk_size: int, chunk_by: str) -> int:
-    """Quick helper to figure out how many chunks process_text_stream would create."""
+    """
+    Quick helper that calculates how many chunks `process_text_stream` 
+    will generate for a given chunk_size/chunk_by.
+    """
     if chunk_by == "word":
         words = text.split()
         return max(1, (len(words) + chunk_size - 1) // chunk_size)

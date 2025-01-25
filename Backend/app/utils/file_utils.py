@@ -209,11 +209,13 @@ def delete_all_files(session: Session, user_id: str):
         handle_error("ProcessingError", f"Failed to delete all files for user {user_id}: {e}", user_id=user_id)
         session.rollback()
 
+# app/utils/file_utils.py
+
 def save_processed_result(
     session: Session,
     filename: str,
     content: str,
-    user_id: str
+    uploaded_file_id: str  # New parameter
 ):
     """
     Saves a processed result into the DB (ProcessedFile table).
@@ -221,17 +223,19 @@ def save_processed_result(
     try:
         sanitized = sanitize_file_name(filename)
         new_processed = ProcessedFile(
-            uploaded_file_id=None,  # link to an UploadedFile if desired
+            uploaded_file_id=uploaded_file_id,  # Use the provided ID
             filename=sanitized,
-            content=content
+            content=content,
+            processed_at=datetime.utcnow()
         )
-        # If `ProcessedFile` has a `user_id` column, you can set it directly here.
-
         session.add(new_processed)
         session.commit()
+        print(f"[DB] Successfully saved processed file: {filename}")
     except Exception as e:
-        handle_error("ProcessingError", f"Failed to save processed result for '{filename}': {e}", user_id=user_id)
+        handle_error("ProcessingError", f"Failed to save processed result for '{filename}': {e}", user_id=None)
+        print(f"[DB] Exception while saving processed file '{filename}': {e}")
         session.rollback()
+        raise  # Re-raise the exception to handle it upstream
 
 def get_processed_results(session: Session, user_id: str) -> Dict[str, str]:
     """
