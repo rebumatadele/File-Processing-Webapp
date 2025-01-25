@@ -1,7 +1,7 @@
 # app/utils/cache_utils.py
 from sqlalchemy.orm import Session
 from app.models.cache import CachedResult
-from typing import Optional, List, Union
+from typing import Optional, List
 
 def get_cached_result(
     db: Session,
@@ -31,7 +31,7 @@ def set_cached_result(
     chunk: str,
     provider_choice: str,
     model_choice: Optional[str],
-    response: Union[dict, List[dict]],  # Accept dict or list of dicts
+    response: str,
     user_id: Optional[str] = None
 ):
     """

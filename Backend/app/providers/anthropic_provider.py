@@ -100,7 +100,7 @@ def generate_with_anthropic_sync(prompt: str, api_key: str, model_choice: str) -
             resp_json = response.json()
             # Some Anthropic responses have "completion" or "content" field
             content = resp_json.get("content", "")
-            return content, response.headers, status
+            return content.text, response.headers, status
         except Exception as e:
             handle_error("APIError", f"JSON parse error: {e}")
             return "", response.headers, status
@@ -130,7 +130,7 @@ def validate_anthropic_api_key(api_key: str) -> bool:
         if resp.status_code == 200:
             return True
         # 401 or 403 => invalid key
-        print("Invalid Key")
+        print("Invalid API Key")
         return False
     except Exception:
         return False

@@ -12,6 +12,6 @@ class CachedResult(Base):
     user_id = Column(String, nullable=True)
     provider_choice = Column(String, nullable=False)
     model_choice = Column(String, nullable=True)
-    chunk = Column(Text, nullable=False)           # The text chunk
-    response = Column(JSON, nullable=False)        # The AI model's response
+    chunk = Column(Text, nullable=False)
+    response = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
