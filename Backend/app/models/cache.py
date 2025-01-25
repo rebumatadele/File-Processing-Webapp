@@ -1,5 +1,5 @@
 # app/models/cache.py
-from sqlalchemy import Column, String, Text, DateTime
+from sqlalchemy import JSON, Column, String, Text, DateTime
 from sqlalchemy.orm import relationship
 from app.config.database import Base
 import uuid
@@ -13,5 +13,5 @@ class CachedResult(Base):
     provider_choice = Column(String, nullable=False)
     model_choice = Column(String, nullable=True)
     chunk = Column(Text, nullable=False)           # The text chunk
-    response = Column(Text, nullable=False)        # The AI model's response
+    response = Column(JSON, nullable=False)        # The AI model's response
     created_at = Column(DateTime, default=datetime.utcnow)
