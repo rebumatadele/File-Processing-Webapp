@@ -1,6 +1,6 @@
 # app/utils/text_processing.py
 
-from typing import Callable, List, Dict, Optional
+from typing import Any, Callable, List, Dict, Optional
 import asyncio
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
@@ -22,7 +22,7 @@ async def process_text_stream(
     user_id: str,
     db: Session,
     progress_callback: Optional[Callable[[], None]] = None
-) -> List[str]:
+) -> List[Dict[str, Any]]:
     """
     Processes the text by chunking and sending each chunk to the selected AI provider.
     Utilizes caching (DB-based) to avoid redundant processing.
@@ -61,19 +61,19 @@ async def process_text_stream(
                 api_key = api_keys.get("OPENAI_API_KEY")
                 if not api_key:
                     raise HTTPException(status_code=400, detail="OpenAI API key not provided.")
-                response = await generate_with_openai(prompt + chunk, api_key)
+                response_text = await generate_with_openai(prompt + chunk, model=model_choice)
 
             elif provider_choice.lower() == "anthropic":
                 api_key = api_keys.get("ANTHROPIC_API_KEY")
                 if not api_key:
                     raise HTTPException(status_code=400, detail="Anthropic API key not provided.")
-                response = await generate_with_anthropic(prompt + chunk, api_key, model_choice)
+                response_text = await generate_with_anthropic(prompt + chunk, api_key, model_choice)
 
             elif provider_choice.lower() == "gemini":
                 api_key = api_keys.get("GEMINI_API_KEY")
                 if not api_key:
                     raise HTTPException(status_code=400, detail="Gemini API key not provided.")
-                response = await generate_with_gemini(prompt + chunk, model=model_choice, api_key=api_key)
+                response_text = await generate_with_gemini(prompt + chunk, model=model_choice, api_key=api_key)
 
             else:
                 raise ValueError(f"Unsupported provider: {provider_choice}")
@@ -83,9 +83,13 @@ async def process_text_stream(
             raise
 
         # 3) Append to responses & cache the new result
-        responses.append(response)
+        response_entry = {
+            "type": "text",
+            "text": response_text
+        }
+        responses.append(response_entry)
         try:
-            set_cached_result(db, chunk, provider_choice, model_choice, response, user_id)
+            set_cached_result(db, chunk, provider_choice, model_choice, response_entry, user_id)
         except Exception as e:
             handle_error("CacheError", f"Failed to cache result: {e}", user_id=user_id)
 

@@ -1,3 +1,5 @@
+# app/providers/anthropic_provider.py
+
 import asyncio
 from curl_cffi.requests import post
 from curl_cffi.requests.exceptions import CurlError, HTTPError, ConnectionError, Timeout
@@ -9,7 +11,6 @@ from typing import Tuple, Dict, Any
 
 ANTHROPIC_EXCEPTIONS = (CurlError, HTTPError, ConnectionError, Timeout)
 
-# Shorten max_retries to e.g. 3 instead of 10 for debugging 
 @retry(max_retries=3, initial_wait=2, backoff_factor=2, exceptions=ANTHROPIC_EXCEPTIONS)
 async def generate_with_anthropic(prompt: str, api_key: str, model_choice: str) -> str:
     """
@@ -41,7 +42,7 @@ async def generate_with_anthropic(prompt: str, api_key: str, model_choice: str) 
                 await asyncio.sleep(wait_seconds)
                 # Retry the request once more after waiting
                 content, headers, status = await asyncio.to_thread(
-                    generate_with_anthropic_sync, prompt, api_key
+                    generate_with_anthropic_sync, prompt, api_key, model_choice
                 )
                 print(f"[Anthropic] Retried. New status={status}, len(content)={len(content)}")
 
@@ -64,7 +65,6 @@ async def generate_with_anthropic(prompt: str, api_key: str, model_choice: str) 
         print(f"[Anthropic] Exception: {e}")
         handle_error("APIError", f"Failed in generate_with_anthropic: {e}")
         raise
-
 
 def generate_with_anthropic_sync(prompt: str, api_key: str, model_choice: str) -> Tuple[str, Dict[str, Any], int]:
     """
@@ -99,15 +99,14 @@ def generate_with_anthropic_sync(prompt: str, api_key: str, model_choice: str) -
         try:
             resp_json = response.json()
             # Some Anthropic responses have "completion" or "content" field
-            content = resp_json.get("content", "")
-            return content.text, response.headers, status
+            content = resp_json.get("completion") or resp_json.get("content") or ""
+            return content, response.headers, status
         except Exception as e:
             handle_error("APIError", f"JSON parse error: {e}")
             return "", response.headers, status
     else:
         # For non-200, return empty content but still pass headers/status
         return "", response.headers, status
-
 
 def validate_anthropic_api_key(api_key: str) -> bool:
     """

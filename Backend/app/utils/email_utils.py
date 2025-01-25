@@ -13,7 +13,7 @@ import traceback  # For detailed error logging
 @retry(max_retries=3, initial_wait=2, backoff_factor=2, exceptions=(aiosmtplib.SMTPException,))
 async def send_email(
     subject: str,
-    recipients: List[str],  # Changed to List[str] since we're using plain strings
+    recipients: List[str],
     body: str,
     attachments: List[str] = None
 ):
@@ -74,6 +74,15 @@ async def send_email(
         await smtp.send_message(message)
         await smtp.quit()
         print("Email sent successfully.")  # Debug log
+
+        # Clean up temporary files after sending the email
+        if attachments:
+            for file_path in attachments:
+                try:
+                    os.remove(file_path)
+                    print(f"Temporary file {file_path} deleted.")
+                except Exception as e:
+                    handle_error("CleanupError", f"Failed to delete temporary file {file_path}: {e}")
     except aiosmtplib.SMTPException as e:
         error_trace = traceback.format_exc()
         handle_error("EmailError", f"Failed to send email: {e}\n{error_trace}")

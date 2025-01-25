@@ -1,3 +1,5 @@
+# app/routers/processing.py
+
 import time
 import asyncio
 import secrets
@@ -18,7 +20,9 @@ from app.utils.file_utils import (
     handle_error,
     get_uploaded_files,
     load_uploaded_file_content,
-    save_processed_result
+    save_processed_result,
+    get_processed_results,
+    sanitize_file_name
 )
 from app.utils.email_utils import send_email
 from app.utils.text_processing import process_text_stream
@@ -56,7 +60,9 @@ async def start_processing(
             chunk_by=settings.chunk_by or "word",
             selected_model=settings.selected_model,
             email=settings.email,
-            status="in_progress"
+            status="in_progress",
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
         )
         db.add(new_job)
         db.commit()
@@ -100,6 +106,8 @@ async def process_texts_task(task_id: str, job_id: str, settings: ProcessingSett
       3) Splits text into chunks and calls `process_text_stream` 
       4) Updates DB after each chunk
       5) Marks job as completed or failed
+      6) Creates a final results file
+      7) Sends the final results file via email
     """
     from app.config.database import SessionLocal
     db: Session = SessionLocal()
@@ -225,9 +233,57 @@ async def process_texts_task(task_id: str, job_id: str, settings: ProcessingSett
             if isinstance(res, Exception):
                 print(f"Task {i} had an exception: {res}")
 
-        # H) If you want to mark the entire job "failed" if any file fails,
-        #    you'd check the results list for an Exception. For now, we mark
-        #    the job "completed" no matter what.
+        # H) Create a final results file by aggregating all processed results
+        try:
+            processed_results = get_processed_results(db, user_id)
+            if not processed_results:
+                raise Exception("No processed results found to create final results file.")
+
+            final_content = ""
+            for fname, content in processed_results.items():
+                final_content += f"===== {fname} =====\n{content}\n\n"
+
+            # Define temporary directory and file path
+            tmp_dir = f"tmp_downloads/{user_id}"
+            os.makedirs(tmp_dir, exist_ok=True)
+            final_filename = f"final_results_{job_id}.txt"
+            final_file_path = os.path.join(tmp_dir, sanitize_file_name(final_filename))
+
+            # Write the final content to the file
+            with open(final_file_path, "w", encoding="utf-8") as f:
+                f.write(final_content)
+
+            print(f"Final results file created at {final_file_path}")
+
+        except Exception as e:
+            handle_error("FinalFileError", f"Failed to create final results file: {e}", user_id=user_id)
+            user_task_status[user_id][task_id] = "Failed: Final results file creation."
+            job.status = "failed"
+            db.commit()
+            db.close()
+            return
+
+        # I) Send the final results file via email if email is provided
+        if settings.email:
+            subject = "Your Final Processed Results"
+            body = f"""
+            <p>Hello,</p>
+            <p>Your text processing job <strong>{job_id}</strong> has been completed successfully.</p>
+            <p>Please find the attached final results file.</p>
+            <p>Regards,<br/>Text Processor Team</p>
+            """
+            try:
+                await send_email(
+                    subject=subject,
+                    recipients=[settings.email],
+                    body=body,
+                    attachments=[final_file_path]
+                )
+                print("Final results email sent successfully.")
+            except Exception as ex:
+                handle_error("EmailError", f"Failed to send final results email: {ex}", user_id=user_id)
+
+        # J) Update job status to completed
         job.status = "completed"
         job.completed_at = datetime.utcnow()
         db.commit()
@@ -236,11 +292,10 @@ async def process_texts_task(task_id: str, job_id: str, settings: ProcessingSett
         db.close()
 
     except Exception as e:
-        # If *any* unhandled exception occurs, mark job as failed in DB + in-memory
-        user_task_status[user_id][task_id] = f"Failed: {e}"
-        handle_error("ProcessingError", f"Job {job_id} background task failed: {e}", user_id=user_id)
-        db.close()
-
+            # If *any* unhandled exception occurs, mark job as failed in DB + in-memory
+            user_task_status[user_id][task_id] = f"Failed: {e}"
+            handle_error("ProcessingError", f"Job {job_id} background task failed: {e}", user_id=user_id)
+            db.close()
 
 async def process_single_file(
     db: Session,
@@ -288,18 +343,6 @@ async def process_single_file(
 
         merged_text = "\n".join(responses)
         save_processed_result(db, file_status.filename, merged_text, uploaded_file_id)  # Pass uploaded_file_id
-
-        if settings.email:
-            subject = f"Your Processed File: {file_status.filename}"
-            body = f"""
-            <p>Hello,</p>
-            <p>Your file <strong>{file_status.filename}</strong> has been processed successfully.</p>
-            <p>Regards,<br/>Text Processor Team</p>
-            """
-            try:
-                await send_email(subject, [settings.email], body)
-            except Exception as ex:
-                handle_error("EmailError", f"Failed to send email: {ex}", user_id=file_status.user_id)
 
         file_status.status = "completed"
         file_status.progress_percentage = 100.0
