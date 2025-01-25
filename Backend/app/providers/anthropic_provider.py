@@ -11,7 +11,7 @@ ANTHROPIC_EXCEPTIONS = (CurlError, HTTPError, ConnectionError, Timeout)
 
 # Shorten max_retries to e.g. 3 instead of 10 for debugging 
 @retry(max_retries=3, initial_wait=2, backoff_factor=2, exceptions=ANTHROPIC_EXCEPTIONS)
-async def generate_with_anthropic(prompt: str, api_key: str) -> str:
+async def generate_with_anthropic(prompt: str, api_key: str, model_choice: str) -> str:
     """
     High-level asynchronous function to call Anthropic API with rate limiting.
     Added debug prints to confirm what's happening.
@@ -23,7 +23,7 @@ async def generate_with_anthropic(prompt: str, api_key: str) -> str:
     try:
         # Synchronous call in a thread returns content, headers, and status
         content, headers, status = await asyncio.to_thread(
-            generate_with_anthropic_sync, prompt, api_key
+            generate_with_anthropic_sync, prompt, api_key, model_choice
         )
 
         print(f"[Anthropic] Response status={status}  len(content)={len(content)}")
@@ -66,7 +66,7 @@ async def generate_with_anthropic(prompt: str, api_key: str) -> str:
         raise
 
 
-def generate_with_anthropic_sync(prompt: str, api_key: str) -> Tuple[str, Dict[str, Any], int]:
+def generate_with_anthropic_sync(prompt: str, api_key: str, model_choice: str) -> Tuple[str, Dict[str, Any], int]:
     """
     Synchronously makes a request to Anthropic and returns (content, headers, status).
     """
@@ -76,11 +76,9 @@ def generate_with_anthropic_sync(prompt: str, api_key: str) -> Tuple[str, Dict[s
         'anthropic-version': '2023-06-01',
     }
     data = {
-        "model": "claude-2",  # or your chosen model
+        "model": model_choice,
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": 1024,
-        # Optionally add temperature, top_p, etc. if you want
-        "temperature": 0.7,
     }
 
     print("[AnthropicSync] POSTing to Anthropic with data size ~", len(str(data)))
@@ -132,6 +130,7 @@ def validate_anthropic_api_key(api_key: str) -> bool:
         if resp.status_code == 200:
             return True
         # 401 or 403 => invalid key
+        print("Invalid Key")
         return False
     except Exception:
         return False

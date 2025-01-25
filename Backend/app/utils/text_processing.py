@@ -67,7 +67,7 @@ async def process_text_stream(
                 api_key = api_keys.get("ANTHROPIC_API_KEY")
                 if not api_key:
                     raise HTTPException(status_code=400, detail="Anthropic API key not provided.")
-                response = await generate_with_anthropic(prompt + chunk, api_key)
+                response = await generate_with_anthropic(prompt + chunk, api_key, model_choice)
 
             elif provider_choice.lower() == "gemini":
                 api_key = api_keys.get("GEMINI_API_KEY")
