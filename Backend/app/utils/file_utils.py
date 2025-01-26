@@ -5,6 +5,7 @@ import re
 from typing import Optional, List, Dict, Any, Union
 import os
 
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from app.models.prompt import Prompt
 from app.models.file import UploadedFile, ProcessedFile
@@ -96,14 +97,49 @@ def update_file_content(
 def delete_all_files(session: Session, user_id: str):
     """
     Deletes all 'UploadedFile' and 'ProcessedFile' rows for the user from the DB.
+    Utilizes ORM methods to respect cascade deletes.
     """
     try:
-        session.query(UploadedFile).filter_by(user_id=user_id).delete()
-        session.query(ProcessedFile).filter_by(user_id=user_id).delete()
+        # Retrieve all UploadedFile records for the user
+        uploaded_files = session.query(UploadedFile).filter_by(user_id=user_id).all()
+        
+        # Delete each UploadedFile; associated ProcessedFiles will be deleted via cascade
+        for file in uploaded_files:
+            session.delete(file)
+        
         session.commit()
     except Exception as e:
         handle_error("ProcessingError", f"Failed to delete all files for user {user_id}: {e}", user_id=user_id)
         session.rollback()
+def delete_specific_file(session: Session, filename: str, user_id: str):
+    """
+    Deletes a specific uploaded file and its associated processed files.
+    """
+    try:
+        # Sanitize the filename to prevent SQL injection or other issues
+        sanitized = sanitize_file_name(filename)
+        
+        # Retrieve the specific UploadedFile record
+        file_record = session.query(UploadedFile).filter_by(
+            user_id=user_id,
+            filename=sanitized
+        ).first()
+        
+        if not file_record:
+            # If the file does not exist, raise a 404 error
+            handle_error("FileNotFound", f"Uploaded file '{filename}' not found in DB.", user_id=user_id)
+            raise HTTPException(status_code=404, detail=f"File '{filename}' not found.")
+        
+        # Delete the UploadedFile; associated ProcessedFiles will be deleted via cascade
+        session.delete(file_record)
+        session.commit()
+        
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions to be handled by the router
+    except Exception as e:
+        handle_error("ProcessingError", f"Failed to delete file '{filename}': {e}", user_id=user_id)
+        session.rollback()
+        raise
 
 def save_processed_result(
     session: Session,

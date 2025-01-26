@@ -1,6 +1,6 @@
 # app/routers/files.py
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, Depends
+from fastapi import APIRouter, HTTPException, Path, UploadFile, File, Depends
 from typing import List
 from sqlalchemy.orm import Session
 from app.models.user import User
@@ -8,6 +8,7 @@ from app.providers.auth import get_current_user, get_db
 from app.schemas.file_schemas import FileContentSchema
 from app.utils.error_utils import handle_error
 from app.utils.file_utils import (
+    delete_specific_file,
     save_uploaded_file,
     get_uploaded_files,
     load_uploaded_file_content,
@@ -99,7 +100,26 @@ def clear_files(
     except Exception as e:
         handle_error("ProcessingError", f"Failed to clear files: {e}", user_id=current_user.id)
         raise HTTPException(status_code=500, detail=f"Failed to clear files: {e}")
-
+    
+@router.delete("/{filename}", summary="Delete a Specific Uploaded File")
+def delete_file(
+    filename: str = Path(..., description="The name of the file to delete"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Deletes a specific uploaded file along with its processed files.
+    """
+    try:
+        # Call the utility function to delete the specific file
+        delete_specific_file(db, filename, current_user.id)
+        return {"message": f"File '{filename}' and its processed versions have been deleted successfully."}
+    except HTTPException as he:
+        raise he  # Re-raise HTTP exceptions
+    except Exception as e:
+        handle_error("ProcessingError", f"Failed to delete file '{filename}': {e}", user_id=current_user.id)
+        raise HTTPException(status_code=500, detail=f"Failed to delete file '{filename}': {e}")
+    
 @router.get("/size/uploaded", summary="Get Uploaded Files Size")
 def get_uploaded_files_size_endpoint(
     db: Session = Depends(get_db),
