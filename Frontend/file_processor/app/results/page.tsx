@@ -7,19 +7,22 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, FileText, Download, RefreshCw, ClipboardCheck } from 'lucide-react'
 import { getAllResults, getResult, downloadResult } from '@/api/resultsUtils'
-import { ProcessingResult } from '@/types/apiTypes'
+import { getProcessingProgress } from '@/api/processingUtils'
+import { ProcessingResult, GetProcessingProgressResponse } from '@/types/apiTypes'
 
 export default function ResultsPage() {
   const [results, setResults] = useState<string[]>([])
   const [selectedResult, setSelectedResult] = useState<ProcessingResult | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-
+  const [processingProgress, setProcessingProgress] = useState<GetProcessingProgressResponse | null>(null)
   const { toast } = useToast()
 
   useEffect(() => {
     fetchResults()
+    fetchProcessingProgress()
   }, [])
 
+  /** Fetch the list of processed results */
   const fetchResults = async () => {
     setIsLoading(true)
     try {
@@ -37,6 +40,33 @@ export default function ResultsPage() {
     }
   }
 
+  /** Fetch processing progress from jobId */
+  const fetchProcessingProgress = async () => {
+    const storedTaskId = localStorage.getItem('taskId')
+    const storedJobId = localStorage.getItem('jobId')
+
+    if (!storedTaskId || !storedJobId) {
+      console.log("No ongoing processing found.")
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const progress: GetProcessingProgressResponse = await getProcessingProgress(storedJobId)
+      setProcessingProgress(progress)
+    } catch (error: unknown) {
+      console.error("Failed to fetch processing progress:", error)
+      toast({
+        title: "Error",
+        description: "Failed to fetch processing progress. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  /** Handle result preview */
   const handlePreviewResult = async (filename: string) => {
     setIsLoading(true)
     try {
@@ -53,6 +83,7 @@ export default function ResultsPage() {
     }
   }
 
+  /** Handle result download */
   const handleDownloadResult = async (filename: string) => {
     setIsLoading(true)
     try {
@@ -78,6 +109,7 @@ export default function ResultsPage() {
     }
   }
 
+  /** Handle content copy */
   const handleCopyContent = () => {
     if (selectedResult) {
       navigator.clipboard.writeText(selectedResult.content)
@@ -88,8 +120,22 @@ export default function ResultsPage() {
     }
   }
 
+  /** Optional: Auto-refresh processing progress every 30 seconds */
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchProcessingProgress()
+    }, 30000) // 30 seconds
+
+    return () => clearInterval(interval)
+  }, [])
+
+  /** Function to manually refresh processing progress */
+  const handleRefreshProcessing = async () => {
+    fetchProcessingProgress()
+  }
+
   return (
-    <div className="container mx-auto py-10">
+    <div className="container mx-auto py-10 space-y-8">
       <Card className="w-full max-w-4xl mx-auto">
         <CardHeader className="bg-primary/10 rounded-t-lg">
           <CardTitle className="text-2xl font-bold flex items-center gap-2">
@@ -100,6 +146,7 @@ export default function ResultsPage() {
         </CardHeader>
         <CardContent className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Results List */}
             <Card className="h-[500px] flex flex-col">
               <CardHeader className="bg-muted/50">
                 <CardTitle className="text-lg font-semibold flex items-center justify-between">
@@ -134,54 +181,116 @@ export default function ResultsPage() {
               </CardContent>
             </Card>
 
+            {/* Processing Progress */}
             <Card className="h-[500px] flex flex-col">
               <CardHeader className="bg-muted/50">
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
-                  <FileText className="h-5 w-5 text-primary" />
-                  Result Preview
+                  <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                  Processing Progress
                 </CardTitle>
                 <CardDescription>
-                  {selectedResult ? selectedResult.filename : "Select a result to preview"}
+                  {processingProgress ? `Job ID: ${processingProgress.job_id}` : "No ongoing processing."}
                 </CardDescription>
               </CardHeader>
               <CardContent className="flex-grow overflow-hidden p-4">
                 <ScrollArea className="h-full">
-                  {selectedResult ? (
-                    <pre className="whitespace-pre-wrap text-sm">{selectedResult.content}</pre>
+                  {processingProgress ? (
+                    processingProgress.files.length === 0 ? (
+                      <p className="text-muted-foreground text-center py-4">No files are currently being processed.</p>
+                    ) : (
+                      processingProgress.files.map((file) => (
+                        <div key={file.filename} className="mb-4">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="font-medium">{file.filename}</span>
+                            <span
+                              className={`text-sm font-semibold ${
+                                file.status === 'Completed' ? 'text-green-600' : 'text-yellow-600'
+                              }`}
+                            >
+                              {file.status}
+                            </span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+                            <div
+                              className={`bg-${file.status === 'Completed' ? 'green' : 'yellow'}-500 h-2.5 rounded-full`}
+                              style={{ width: `${file.progress_percentage}%` }}
+                            ></div>
+                          </div>
+                          <p className="text-sm text-gray-600">
+                            {file.processed_chunks} / {file.total_chunks} chunks processed ({file.progress_percentage.toFixed(2)}%)
+                          </p>
+                        </div>
+                      ))
+                    )
                   ) : (
-                    <p className="text-muted-foreground text-center py-4">No result selected.</p>
+                    <p className="text-muted-foreground text-center py-4">No ongoing processing.</p>
                   )}
                 </ScrollArea>
               </CardContent>
               <CardFooter className="bg-muted/30 rounded-b-lg flex justify-between items-center p-2">
-                {selectedResult && (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleCopyContent}
-                      disabled={isLoading}
-                    >
-                      <ClipboardCheck className="mr-2 h-4 w-4" />
-                      Copy Content
-                    </Button>
-                    <Button
-                      onClick={() => handleDownloadResult(selectedResult.filename)}
-                      disabled={isLoading}
-                      size="sm"
-                    >
-                      {isLoading ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Download className="mr-2 h-4 w-4" />
-                      )}
-                      Download
-                    </Button>
-                  </>
+                {processingProgress && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRefreshProcessing}
+                    disabled={isLoading}
+                  >
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Refresh
+                  </Button>
                 )}
               </CardFooter>
             </Card>
           </div>
+
+          {/* Result Preview */}
+          <Card className="w-full max-w-4xl mx-auto mt-8">
+            <CardHeader className="bg-muted/50">
+              <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                <FileText className="h-5 w-5 text-primary" />
+                Result Preview
+              </CardTitle>
+              <CardDescription>
+                {selectedResult ? selectedResult.filename : "Select a result to preview"}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex-grow overflow-hidden p-4">
+              <ScrollArea className="h-[300px]">
+                {selectedResult ? (
+                  <pre className="whitespace-pre-wrap text-sm">{selectedResult.content}</pre>
+                ) : (
+                  <p className="text-muted-foreground text-center py-4">No result selected.</p>
+                )}
+              </ScrollArea>
+            </CardContent>
+            <CardFooter className="bg-muted/30 rounded-b-lg flex justify-between items-center p-2">
+              {selectedResult && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCopyContent}
+                    disabled={isLoading}
+                  >
+                    <ClipboardCheck className="mr-2 h-4 w-4" />
+                    Copy Content
+                  </Button>
+                  <Button
+                    onClick={() => handleDownloadResult(selectedResult.filename)}
+                    disabled={isLoading}
+                    size="sm"
+                  >
+                    {isLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="mr-2 h-4 w-4" />
+                    )}
+                    Download
+                  </Button>
+                </>
+              )}
+            </CardFooter>
+          </Card>
         </CardContent>
       </Card>
 

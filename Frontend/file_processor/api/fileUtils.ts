@@ -4,6 +4,7 @@ import {
   ClearFilesResponse, 
   GetFilesSizeResponse,
   FileContentResponse,
+  DeleteFileResponse,
 } from '../types/apiTypes';
 import handleError from '../utils/handleError';
 
@@ -117,6 +118,23 @@ export const getProcessedFilesSize = async (): Promise<number> => {
   try {
     const response = await axiosInstance.get<GetFilesSizeResponse>('/files/size/processed');
     return response.data.processed_files_size_bytes || 0;
+  } catch (error) {
+    return handleError(error);
+  }
+};
+
+
+/**
+ * Deletes a specific uploaded file.
+ * @param {string} filename - The name of the file to delete.
+ * @returns {Promise<DeleteFileResponse>} - Response containing a success message.
+ */
+export const deleteFile = async (filename: string): Promise<DeleteFileResponse> => {
+  try {
+    const response = await axiosInstance.delete<DeleteFileResponse>(
+      `/files/${encodeURIComponent(filename)}`
+    );
+    return response.data;
   } catch (error) {
     return handleError(error);
   }

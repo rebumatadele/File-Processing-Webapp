@@ -31,6 +31,13 @@ export interface ClearCacheResponse {
   message: string;
 }
 
+export interface ErrorLog {
+  id: string;
+  timestamp: string;
+  error_type: string;
+  message: string;
+}
+
 export interface ClearErrorsResponse {
   message: string;
 }
@@ -50,11 +57,27 @@ export interface ProcessingSettings {
 
 export interface StartProcessingResponse {
   task_id: string;
+  job_id: string;
   message: string;
+}
+
+export interface JobProgressFileStatus {
+  filename: string;
+  status: string;
+  processed_chunks: number;
+  total_chunks: number;
+  progress_percentage: number;
+}
+
+export interface GetProcessingProgressResponse {
+  job_id: string;
+  job_status: string;
+  files: JobProgressFileStatus[];
 }
 
 export interface TaskStatusResponse {
   task_id: string;
+  job_id: string;
   status: string;
 }
 
@@ -141,4 +164,39 @@ export interface BatchListResponse {
 export interface FileContentResponse {
   filename: string;
   content: string;
+}
+export interface DeleteFileResponse {
+  message: string;
+}
+
+
+export interface LocalUsage {
+  max_rpm: number;
+  max_rph: number;
+  current_rpm: number;
+  current_rph: number;
+  reset_time_rpm: number;
+  reset_time_rph: number;
+  cooldown_period: number;
+  last_retry_after: string | null;
+}
+
+export interface AnthropicUsage {
+  requests_limit: number;
+  requests_remaining: number;
+  requests_reset_time: string; // ISO 8601 format
+  tokens_limit: number;
+  tokens_remaining: number;
+  tokens_reset_time: string; // ISO 8601 format
+  input_tokens_limit: number;
+  input_tokens_remaining: number;
+  input_tokens_reset_time: string; // ISO 8601 format
+  output_tokens_limit: number;
+  output_tokens_remaining: number;
+  output_tokens_reset_time: string; // ISO 8601 format
+}
+
+export interface UsageResponse {
+  local_usage: LocalUsage;
+  anthropic_usage: AnthropicUsage;
 }

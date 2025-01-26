@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "@/hooks/use-toast"
 import { Loader2, Upload, Trash2, Save, FileText, FolderOpen, Edit2 } from 'lucide-react'
-import { uploadFiles, listFiles, getFileContent, editFileContent, clearFiles } from '@/api/fileUtils'
+import { uploadFiles, listFiles, getFileContent, editFileContent, clearFiles, deleteFile } from '@/api/fileUtils'
 import { FileContentResponse } from '@/types/apiTypes'
 
 export default function FileManagementPage() {
@@ -131,6 +131,47 @@ export default function FileManagementPage() {
     }
   }
 
+  const handleDeleteFile = async (filename: string) => {
+    // Optional: Confirm deletion with the user
+    const confirmDelete = window.confirm(`Are you sure you want to delete '${filename}'?`);
+    if (!confirmDelete) return;
+  
+    setIsLoading(true);
+    try {
+      const response = await deleteFile(filename);
+      if ('message' in response) {
+        toast({
+          title: "File Deleted",
+          description: response.message,
+        });
+        // Refresh the file list
+        await fetchFiles();
+  
+        // If the deleted file was selected, clear the selection
+        if (selectedFile === filename) {
+          setSelectedFile(null);
+          setFileContent('');
+        }
+      } else {
+        // Handle unexpected response structure
+        toast({
+          title: "Unexpected Response",
+          description: "Received an unexpected response from the server.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error deleting file:", error);
+      toast({
+        title: "Error",
+        description: `Failed to delete file '${filename}'. Please try again.`,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
   return (
     <div className="container mx-auto py-10">
       <Card className="w-full max-w-4xl mx-auto">
@@ -181,16 +222,27 @@ export default function FileManagementPage() {
                     <p className="text-muted-foreground text-center py-4">No files uploaded yet.</p>
                   ) : (
                     uploadedFiles.map((file) => (
-                      <Button
-                        key={file}
-                        variant="ghost"
-                        className="w-full justify-start mb-2"
-                        onClick={() => handleSelectFile(file)}
-                        disabled={isLoading}
-                      >
-                        <FileText className="mr-2 h-4 w-4" />
-                        {file}
-                      </Button>
+                      <div key={file} className="flex items-center justify-between mb-2">
+                        <Button
+                          variant="ghost"
+                          className="flex-grow justify-start"
+                          onClick={() => handleSelectFile(file)}
+                          disabled={isLoading}
+                        >
+                          <FileText className="mr-2 h-4 w-4" />
+                          {file}
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          onClick={() => handleDeleteFile(file)}
+                          disabled={isLoading}
+                          className="ml-2"
+                          aria-label={`Delete ${file}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     ))
                   )}
                 </ScrollArea>

@@ -30,7 +30,7 @@ const navItems = [
   { name: 'Prompt Management', href: '/prompt-management', icon: MessageSquare },
   { name: 'File Management', href: '/file-management', icon: FolderOpen },
   { name: 'Processing', href: '/processing', icon: Play },
-  { name: 'Batch Processing', href: '/claude_batch_processing', icon: Play },
+  // { name: 'Batch Processing', href: '/claude_batch_processing', icon: Play },
   { name: 'Results', href: '/results', icon: FileText },
   { name: 'Error', href: '/errors', icon: AlertTriangle },
   { name: 'Usage', href: '/usage', icon: PercentIcon },

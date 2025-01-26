@@ -1,16 +1,16 @@
 // src/api/errorUtils.ts
 
 import axiosInstance from './axiosInstance';
-import { ClearErrorsResponse } from '../types/apiTypes';
+import { ClearErrorsResponse, ErrorLog } from '../types/apiTypes';
 import handleError from '../utils/handleError';
 
 /**
  * Retrieves the list of error logs.
- * @returns {Promise<string[]>}
+ * @returns {Promise<ErrorLog[]>}
  */
-export const getErrorLogs = async (): Promise<string[]> => {
+export const getErrorLogs = async (): Promise<ErrorLog[]> => {
   try {
-    const response = await axiosInstance.get<string[]>('/errors/');
+    const response = await axiosInstance.get<ErrorLog[]>('/errors/');
     return response.data;
   } catch (error) {
     return handleError(error);

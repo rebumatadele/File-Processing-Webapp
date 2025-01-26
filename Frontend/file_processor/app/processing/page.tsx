@@ -12,11 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
 import { Loader2, Play, RefreshCw, Eye, EyeOff, Cpu, Zap, Mail, Layers, SplitSquareVertical, Files } from 'lucide-react'
-import { startProcessing, getTaskStatus } from '@/api/processingUtils'
+import { startProcessing, getTaskStatus, getProcessingProgress } from '@/api/processingUtils'
 import { listFiles } from '@/api/fileUtils'
 import { listPrompts, loadPrompt } from '@/api/promptUtils'
 import { getUserConfig } from '@/api/configUtils'
-import { ProcessingSettings, TaskStatusResponse } from '@/types/apiTypes'
+import { ProcessingSettings, TaskStatusResponse, StartProcessingResponse, GetProcessingProgressResponse } from '@/types/apiTypes'
 
 /** Zod Schema */
 const formSchema = z.object({
@@ -30,7 +30,6 @@ const formSchema = z.object({
   anthropic_api_key: z.string().optional(),
   gemini_api_key: z.string().optional(),
   selected_files: z.array(z.string()).min(1, 'Please select at least one file'),  // Added field
-
 }).refine((data) => {
   if (data.provider_choice === 'OpenAI') return !!data.openai_api_key
   if (data.provider_choice === 'Anthropic') return !!data.anthropic_api_key
@@ -51,7 +50,9 @@ export default function ProcessingPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [prompts, setPrompts] = useState<string[]>([]);
   const [taskId, setTaskId] = useState<string | null>(null);
+  const [jobId, setJobId] = useState<string | null>(null); // New state for job_id
   const [taskStatus, setTaskStatus] = useState<TaskStatusResponse | null>(null);
+  const [jobProgress, setJobProgress] = useState<GetProcessingProgressResponse | null>(null); // New state for job progress
   const [showApiKey, setShowApiKey] = useState(false);
   const [openaiApiKey, setOpenaiApiKey] = useState<string>('');
   const [anthropicApiKey, setAnthropicApiKey] = useState<string>('');
@@ -73,17 +74,26 @@ export default function ProcessingPage() {
       anthropic_api_key: '',
       gemini_api_key: '',
       selected_files: [],  // Initialize selected_files
-
     },
   });
 
   /** Watch the current provider choice for conditional rendering */
   const providerChoice = form.watch('provider_choice');
 
-  /** On Mount: fetch prompts & user config */
+  /** On Mount: fetch prompts, files & retrieve task/job IDs from localStorage */
   useEffect(() => {
     fetchPrompts();
     fetchFiles();
+
+    // **Retrieve taskId and jobId from localStorage**
+    const storedTaskId = localStorage.getItem('taskId');
+    const storedJobId = localStorage.getItem('jobId');
+
+    if (storedTaskId && storedJobId) {
+      setTaskId(storedTaskId);
+      setJobId(storedJobId);
+      checkTaskStatus(storedTaskId, storedJobId); // Fetch status immediately
+    }
 
     getUserConfig()
       .then((config) => {
@@ -93,7 +103,7 @@ export default function ProcessingPage() {
           setOpenaiApiKey(config.openai_api_key || "");
           setGeminiApiKey(config.gemini_api_key || "");
           setAnthropicApiKey(config.anthropic_api_key || "");
-  
+
           // Also update the form fields
           if (config.openai_api_key) {
             form.setValue("openai_api_key", config.openai_api_key);
@@ -110,7 +120,6 @@ export default function ProcessingPage() {
         console.warn("User configuration not found or failed to retrieve.", error);
       });
   }, []);
-  
 
   /** Fetch the list of prompts from the backend */
   const fetchPrompts = async () => {
@@ -140,6 +149,8 @@ export default function ProcessingPage() {
       });
     }
   };
+
+  /** Fetch the list of files from the backend */
   const fetchFiles = async () => {
     try {
       const fileList = await listFiles();
@@ -149,7 +160,6 @@ export default function ProcessingPage() {
       toast({ title: 'Error', description: 'Failed to fetch files. Please try again.', variant: 'destructive' });
     }
   };
-  
 
   /** Manually triggered on form submission (RHForm) */
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
@@ -166,9 +176,10 @@ export default function ProcessingPage() {
         apiKey = geminiApiKey;
       }
 
+      const promptContent = await loadPrompt(data.prompt);
       const settings: ProcessingSettings = {
         provider_choice: data.provider_choice,
-        prompt: (await loadPrompt(data.prompt)).content,
+        prompt: promptContent.content,
         chunk_size: data.chunk_size,
         chunk_by: data.chunk_by,
         selected_model: data.selected_model,
@@ -177,18 +188,23 @@ export default function ProcessingPage() {
         anthropic_api_key: data.provider_choice === 'Anthropic' ? apiKey : '',
         gemini_api_key: data.provider_choice === 'Gemini' ? apiKey : '',
         files: data.selected_files,  // Include selected files in settings
-
       };
 
       console.log('onSubmit -> Final settings to be sent:', settings);
 
-      const response = await startProcessing(settings);
+      const response: StartProcessingResponse = await startProcessing(settings);
       console.log('onSubmit -> Received response:', response);
 
       setTaskId(response.task_id);
+      setJobId(response.job_id); // Store job_id
+
+      // **Persist IDs in localStorage**
+      localStorage.setItem('taskId', response.task_id);
+      localStorage.setItem('jobId', response.job_id);
+
       toast({
         title: 'Processing started',
-        description: `Task ID: ${response.task_id}`,
+        description: `Task ID: ${response.task_id}, Job ID: ${response.job_id}`,
       });
     } catch (error: unknown) {
       console.error('onSubmit -> Error starting processing:', error);
@@ -203,15 +219,30 @@ export default function ProcessingPage() {
   };
 
   /** Check Task Status Handler */
-  const checkTaskStatus = async () => {
-    if (!taskId) return;
-    console.log('checkTaskStatus -> Called, taskId:', taskId);
+  const checkTaskStatus = async (currentTaskId?: string, currentJobId?: string) => {
+    const id = currentTaskId || taskId;
+    const jId = currentJobId || jobId;
+
+    if (!id || !jId) return;
+    console.log('checkTaskStatus -> Called, taskId:', id);
 
     setIsLoading(true);
     try {
-      const status = await getTaskStatus(taskId);
+      const status: TaskStatusResponse = await getTaskStatus(id);
       console.log('checkTaskStatus -> Received status:', status);
       setTaskStatus(status);
+
+      if (status.job_id) {
+        setJobId(status.job_id); // Ensure job_id is stored
+        const progress: GetProcessingProgressResponse = await getProcessingProgress(status.job_id);
+        setJobProgress(progress);
+      }
+
+      // **Handle Completion: Clear IDs from localStorage if completed**
+      if (status.status === 'Completed') {
+        localStorage.removeItem('taskId');
+        localStorage.removeItem('jobId');
+      }
     } catch (error: unknown) {
       console.error('checkTaskStatus -> Error:', error);
       toast({
@@ -226,6 +257,7 @@ export default function ProcessingPage() {
 
   return (
     <div className="container mx-auto py-10 space-y-8">
+      {/* Processing Form */}
       <Card className="w-full max-w-4xl mx-auto">
         <CardHeader className="bg-primary/10 rounded-t-lg">
           <CardTitle className="text-2xl font-bold flex items-center gap-2">
@@ -294,6 +326,7 @@ export default function ProcessingPage() {
                 />
               </div>
 
+              {/* Prompt Selection */}
               <FormField
                 control={form.control}
                 name="prompt"
@@ -321,9 +354,8 @@ export default function ProcessingPage() {
                   </FormItem>
                 )}
               />
-              {/* New Multi-select Dropdown for File Selection */}
-              
-              {/* New Multi-select Dropdown for File Selection */}
+
+              {/* Multi-select Dropdown for File Selection */}
               <FormField
                 control={form.control}
                 name="selected_files"
@@ -427,6 +459,7 @@ export default function ProcessingPage() {
                 )}
               />
 
+              {/* Conditional API Key Fields */}
               {providerChoice === 'OpenAI' && (
                 <FormField
                   control={form.control}
@@ -438,7 +471,7 @@ export default function ProcessingPage() {
                         <div className="relative">
                           <Input
                             {...field}
-                            type={showApiKey ? 'text' : 'text'}
+                            type={showApiKey ? 'text' : 'text'} // Changed to text for security
                             placeholder="Enter OpenAI API Key"
                             value={openaiApiKey}
                             onChange={(e) => {
@@ -474,7 +507,7 @@ export default function ProcessingPage() {
                         <div className="relative">
                           <Input
                             {...field}
-                            type={showApiKey ? 'text' : 'text'}
+                            type={showApiKey ? 'text' : 'text'} // Changed to text for security
                             placeholder="Enter Anthropic API Key"
                             value={anthropicApiKey}
                             onChange={(e) => {
@@ -510,7 +543,7 @@ export default function ProcessingPage() {
                         <div className="relative">
                           <Input
                             {...field}
-                            type={showApiKey ? 'text' : 'text'}
+                            type={showApiKey ? 'text' : 'text'} // Changed to text for security
                             placeholder="Enter Gemini API Key"
                             value={geminiApiKey}
                             onChange={(e) => {
@@ -564,44 +597,75 @@ export default function ProcessingPage() {
       </Card>
 
       {/* Task Status Section */}
-      {taskId && (
+      {taskId && jobId && (
         <Card className="w-full max-w-4xl mx-auto">
           <CardHeader className="bg-secondary/10 rounded-t-lg">
             <CardTitle className="text-xl font-semibold flex items-center gap-2">
               <RefreshCw className="h-5 w-5" />
-              Task Status
+              Task & Job Status
             </CardTitle>
-            <CardDescription>Check the status of your processing task.</CardDescription>
+            <CardDescription>Check the status of your processing task and job.</CardDescription>
           </CardHeader>
           <CardContent className="p-6">
-            <p className="text-lg font-medium">
-              Task ID: <span className="text-primary">{taskId}</span>
-            </p>
-            {taskStatus && (
-              <div className="mt-4">
-                <p className="text-lg">
-                  Status:{" "}
-                  <span className="font-semibold text-secondary">{taskStatus.status}</span>
-                </p>
+            <div className="space-y-4">
+              <p className="text-lg font-medium">
+                Task ID: <span className="text-primary">{taskId}</span>
+              </p>
+              <p className="text-lg font-medium">
+                Job ID: <span className="text-secondary">{jobId}</span>
+              </p>
+              <p className="text-lg">
+                Status:{" "}
+                <span className="font-semibold text-secondary">
+                  {taskStatus?.status || "Loading..."}
+                </span>
+              </p>
+            </div>
+
+            {/* Detailed Job Progress */}
+            {jobProgress && (
+              <div className="mt-6">
+                <h3 className="text-lg font-semibold mb-2">Detailed Progress</h3>
+                <div className="space-y-4">
+                  {jobProgress.files.map((fileStatus) => (
+                    <Card key={fileStatus.filename} className="p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium">{fileStatus.filename}</span>
+                        <span className={`text-sm font-semibold ${fileStatus.status === 'Completed' ? 'text-green-600' : 'text-yellow-600'}`}>
+                          {fileStatus.status}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+                        <div
+                          className={`bg-${fileStatus.status === 'Completed' ? 'green' : 'yellow'}-500 h-2.5 rounded-full`}
+                          style={{ width: `${fileStatus.progress_percentage}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-sm text-gray-600">
+                        {fileStatus.processed_chunks} / {fileStatus.total_chunks} chunks processed
+                      </p>
+                    </Card>
+                  ))}
+                </div>
               </div>
             )}
           </CardContent>
-          <CardFooter className="bg-secondary/5 rounded-b-lg justify-between">
-            <Button onClick={checkTaskStatus} disabled={isLoading} className="w-full">
+          <CardFooter className="bg-secondary/5 rounded-b-lg flex justify-between">
+            <Button onClick={() => checkTaskStatus()} disabled={isLoading} className="w-full">
               {isLoading ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <RefreshCw className="mr-2 h-4 w-4" />
               )}
-              Check Status
+              Refresh Status
             </Button>
             <Button 
               onClick={() => window.location.href = "/results"} 
-              disabled={taskStatus?.status !== "Completed"}
-              className='mx-10'
+              disabled={jobProgress?.job_status !== "Completed"}
+              className='ml-4'
             >
               Next
-          </Button>
+            </Button>
           </CardFooter>
         </Card>
       )}

@@ -2,6 +2,7 @@
 
 import axiosInstance from './axiosInstance';
 import { 
+  GetProcessingProgressResponse,
   ProcessingSettings, 
   StartProcessingResponse, 
   TaskStatusResponse 
@@ -30,6 +31,20 @@ export const startProcessing = async (settings: ProcessingSettings): Promise<Sta
 export const getTaskStatus = async (taskId: string): Promise<TaskStatusResponse> => {
   try {
     const response = await axiosInstance.get<TaskStatusResponse>(`/processing/status/${taskId}`);
+    return response.data;
+  } catch (error) {
+    return handleError(error);
+  }
+};
+
+/**
+ * Retrieves detailed progress for a specific job.
+ * @param {string} jobId - ID of the job.
+ * @returns {Promise<GetProcessingProgressResponse>}
+ */
+export const getProcessingProgress = async (jobId: string): Promise<GetProcessingProgressResponse> => {
+  try {
+    const response = await axiosInstance.get<GetProcessingProgressResponse>(`/processing/progress/${jobId}`);
     return response.data;
   } catch (error) {
     return handleError(error);
