@@ -169,6 +169,7 @@ export interface DeleteFileResponse {
   message: string;
 }
 
+// src/types/apiTypes.ts
 
 export interface LocalUsage {
   max_rpm: number;
@@ -199,4 +200,27 @@ export interface AnthropicUsage {
 export interface UsageResponse {
   local_usage: LocalUsage;
   anthropic_usage: AnthropicUsage;
+}
+
+// ... existing interfaces
+
+export interface ClearCacheResponse {
+  message: string;
+}
+
+export interface ClearFilesResponse {
+  message: string;
+}
+
+export interface GetCacheSizeResponse {
+  cache_size_bytes: number;
+}
+
+export interface CacheContentsResponse {
+  cache_contents: string[];
+}
+
+export interface GetFilesSizeResponse {
+  uploaded_files_size_bytes?: number;
+  processed_files_size_bytes?: number;
 }

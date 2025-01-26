@@ -1,3 +1,5 @@
+// src/api/fileUtils.ts
+
 import axiosInstance from './axiosInstance';
 import { 
   UploadFilesResponse, 
@@ -83,7 +85,6 @@ export const editFileContent = async (
   }
 };
 
-
 /**
  * Clears all uploaded files.
  * @returns {Promise<ClearFilesResponse>}
@@ -101,7 +102,7 @@ export const clearFiles = async (): Promise<ClearFilesResponse> => {
  * Retrieves the total size of uploaded files in bytes.
  * @returns {Promise<number>}
  */
-export const getUploadedFilesSize = async (): Promise<number> => {
+export const getUploadedFilesSize = async (): Promise<number> => { // Updated function name
   try {
     const response = await axiosInstance.get<GetFilesSizeResponse>('/files/size/uploaded');
     return response.data.uploaded_files_size_bytes || 0;
@@ -114,7 +115,7 @@ export const getUploadedFilesSize = async (): Promise<number> => {
  * Retrieves the total size of processed files in bytes.
  * @returns {Promise<number>}
  */
-export const getProcessedFilesSize = async (): Promise<number> => {
+export const getProcessedFilesSize = async (): Promise<number> => { // Updated function name
   try {
     const response = await axiosInstance.get<GetFilesSizeResponse>('/files/size/processed');
     return response.data.processed_files_size_bytes || 0;
@@ -122,7 +123,6 @@ export const getProcessedFilesSize = async (): Promise<number> => {
     return handleError(error);
   }
 };
-
 
 /**
  * Deletes a specific uploaded file.
