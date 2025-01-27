@@ -1,5 +1,3 @@
-// src/app/reset-password/page.tsx
-
 'use client';
 
 import { useState, Suspense } from 'react';
@@ -142,27 +140,32 @@ function ResetPasswordForm({ token }: { token: string }) {
   );
 }
 
-// **Main Page Component with Suspense Boundary**
-export default function ResetPasswordPage() {
+// **Component that handles the Suspense Boundary and uses useSearchParams**
+function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
 
+  return token ? (
+    <ResetPasswordForm token={token} />
+  ) : (
+    <div className="container mx-auto p-4 max-w-md">
+      <h1 className="text-2xl font-bold mb-4">Reset Password</h1>
+      <p className="text-sm mt-2">
+        Invalid or missing token. Please{' '}
+        <Link href="/forgot-password" className="text-primary underline">
+          request a new password reset
+        </Link>
+        .
+      </p>
+    </div>
+  );
+}
+
+// **Main Page Component with Suspense Boundary**
+export default function ResetPasswordPage() {
   return (
     <Suspense fallback={<div>Loading...</div>}>
-      {token ? (
-        <ResetPasswordForm token={token} />
-      ) : (
-        <div className="container mx-auto p-4 max-w-md">
-          <h1 className="text-2xl font-bold mb-4">Reset Password</h1>
-          <p className="text-sm mt-2">
-            Invalid or missing token. Please{' '}
-            <Link href="/forgot-password" className="text-primary underline">
-              request a new password reset
-            </Link>
-            .
-          </p>
-        </div>
-      )}
+      <ResetPasswordContent />
     </Suspense>
   );
 }

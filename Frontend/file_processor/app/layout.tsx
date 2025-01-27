@@ -11,7 +11,12 @@ interface LayoutProps {
 export const metadata = {
   title: 'File Processor App', // Title for the browser tab
   description: 'Effortlessly process and manage your files with ease.', // Description for SEO
-  viewport: 'width=device-width, initial-scale=1.0', // Responsive meta tag
+  // Removed viewport from metadata
+};
+
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1.0,
 };
 
 const Layout: FC<LayoutProps> = ({ children }) => {
@@ -27,7 +32,6 @@ const Layout: FC<LayoutProps> = ({ children }) => {
       <head>
         <title>File Processor App</title>
         <meta name="description" content="Effortlessly process and manage your files with ease." />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <link rel="icon" type="image/svg+xml" href={`data:image/svg+xml,${encodeURIComponent(faviconSVG)}`} />
       </head>
       <body className="text-gray-900">
