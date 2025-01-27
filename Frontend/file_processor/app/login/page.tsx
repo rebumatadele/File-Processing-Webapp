@@ -1,7 +1,9 @@
+// pages/login.tsx
+
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation'; // Use next/navigation for App Router
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -88,6 +90,11 @@ export default function LoginPage() {
         Don&apos;t have an account?{' '}
         <Link href="/signup" className="text-primary underline">
           Sign Up
+        </Link>
+      </p>
+      <p className="text-sm mt-2">
+        <Link href="/forgot-password" className="text-primary underline">
+          Forgot Password?
         </Link>
       </p>
     </div>

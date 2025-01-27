@@ -224,3 +224,56 @@ export interface GetFilesSizeResponse {
   uploaded_files_size_bytes?: number;
   processed_files_size_bytes?: number;
 }
+
+// src/types/apiTypes.ts
+
+// ... existing interfaces
+
+// Authentication Types
+export interface UserCreate {
+  email: string;
+  password: string;
+}
+
+export interface UserLogin {
+  email: string;
+  password: string;
+}
+
+export interface Token {
+  access_token: string;
+  token_type: string;
+}
+
+export interface UserResponse {
+  id: string;
+  email: string;
+  is_verified: boolean;
+}
+
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ForgotPasswordResponse {
+  message: string;
+}
+
+export interface ResetPasswordRequest {
+  new_password: string;
+}
+
+export interface ResetPasswordResponse {
+  message: string;
+}
+
+// Error Response Type
+export interface ErrorResponseDetail {
+  loc: string[];
+  msg: string;
+  type: string;
+}
+
+export interface ErrorResponse {
+  detail: string | ErrorResponseDetail[];
+}

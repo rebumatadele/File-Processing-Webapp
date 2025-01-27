@@ -8,7 +8,7 @@ export function middleware(request: NextRequest) {
     request.cookies.get('access_token')?.value ||
     request.headers.get('Authorization')?.split(' ')[1]
   
-  const publicPaths = ['/', '/login', '/signup']
+  const publicPaths = ['/', '/login', '/signup', '/forgot-password', '/reset-password']
 
   if (publicPaths.includes(request.nextUrl.pathname)) {
     return NextResponse.next()
