@@ -2,45 +2,32 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import axiosInstance from '@/api/axiosInstance';
+import resetPasswordInstance from '@/api/resetPasswordInstance'; // Import the new Axios instance
 import {
-  ResetPasswordRequest,
   ResetPasswordResponse,
   ErrorResponse,
 } from '@/types/apiTypes';
 import axios from 'axios';
 
-export default function ResetPasswordPage() {
+// **Component that contains the Reset Password Form**
+function ResetPasswordForm({ token }: { token: string }) {
   const [newPassword, setNewPassword] = useState<string>('');
   const [confirmPassword, setConfirmPassword] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const { toast } = useToast();
   const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const token = searchParams.get('token');
-
-  useEffect(() => {
-    if (!token) {
-      toast({
-        title: 'Error',
-        description: 'Invalid or missing token.',
-        variant: 'destructive',
-      });
-      router.push('/forgot-password');
-    }
-  }, [token, toast, router]);
 
   const handleResetPassword = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
+    // **Password Match Validation**
     if (newPassword !== confirmPassword) {
       toast({
         title: 'Error',
@@ -50,36 +37,38 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    if (!token) {
+    // **Ensure Password is Not Empty or Whitespace**
+    if (newPassword.trim() === '') {
       toast({
         title: 'Error',
-        description: 'Invalid or missing token.',
+        description: 'Password cannot be empty.',
         variant: 'destructive',
       });
-      router.push('/forgot-password');
       return;
     }
 
     setIsLoading(true);
 
-    const requestData: ResetPasswordRequest = { new_password: newPassword };
+    // **Prepare Request Data as an Object**
+    const requestData = { new_password: newPassword };
 
-    // Debugging: Log the token and requestData
+    // **Debugging Logs**
     console.log('Reset Password Request Data:', requestData);
     console.log('Authorization Token:', token);
 
     try {
-      const response = await axiosInstance.post<ResetPasswordResponse>(
+      // **API Call to Reset Password**
+      const response = await resetPasswordInstance.post<ResetPasswordResponse>(
         '/auth/reset-password',
-        requestData,
+        requestData, // Send as JSON object
         {
           headers: {
             Authorization: `Bearer ${token}`,
-            // 'Content-Type': 'application/json', // Axios sets this automatically
           },
         }
       );
 
+      // **Success Toast and Redirection**
       toast({
         title: 'Success',
         description: response.data.message,
@@ -88,6 +77,7 @@ export default function ResetPasswordPage() {
     } catch (error: unknown) {
       let errorMessage: string = 'Something went wrong';
 
+      // **Error Handling**
       if (axios.isAxiosError<ErrorResponse>(error)) {
         if (error.response?.data?.detail) {
           if (Array.isArray(error.response.data.detail)) {
@@ -101,6 +91,7 @@ export default function ResetPasswordPage() {
         }
       }
 
+      // **Error Toast**
       toast({
         title: 'Error',
         description: errorMessage,
@@ -123,7 +114,7 @@ export default function ResetPasswordPage() {
             value={newPassword}
             onChange={(e) => setNewPassword(e.target.value)}
             required
-            minLength={6} // Enforce minimum password length
+            // Removed minLength
           />
         </div>
         <div>
@@ -134,7 +125,7 @@ export default function ResetPasswordPage() {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
-            minLength={6} // Enforce minimum password length
+            // Removed minLength
           />
         </div>
         <Button type="submit" disabled={isLoading}>
@@ -148,5 +139,30 @@ export default function ResetPasswordPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+// **Main Page Component with Suspense Boundary**
+export default function ResetPasswordPage() {
+  const searchParams = useSearchParams();
+  const token = searchParams.get('token');
+
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      {token ? (
+        <ResetPasswordForm token={token} />
+      ) : (
+        <div className="container mx-auto p-4 max-w-md">
+          <h1 className="text-2xl font-bold mb-4">Reset Password</h1>
+          <p className="text-sm mt-2">
+            Invalid or missing token. Please{' '}
+            <Link href="/forgot-password" className="text-primary underline">
+              request a new password reset
+            </Link>
+            .
+          </p>
+        </div>
+      )}
+    </Suspense>
   );
 }
