@@ -12,8 +12,12 @@ from app.routers import (
 from app.utils.environment import load_environment_variables
 from dotenv import load_dotenv
 from app.config.database import engine, Base
-from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
-from fastapi.openapi.models import OAuth2 as OAuth2Model
+from app.dependencies.rate_limiters import get_all_rate_limiters  # Import rate limiters
+
+# **Import all models before creating tables**
+from app.models.user import User
+from app.models.rate_limiter import RateLimiterModel
+# Import other models here if necessary
 
 # Load environment variables at the very start
 load_environment_variables()
@@ -31,21 +35,26 @@ app = FastAPI(
 origins = [
     "http://localhost",
     "http://localhost:3000",
-    "http://fileprocessor.netlify.app/",
-    "https://fileprocessor.netlify.app/"
+    "http://fileprocessor.netlify.app",
+    "https://fileprocessor.netlify.app"
     # Add your frontend URL here
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust as needed for security
+    allow_origins=[
+        "http://localhost",
+        "http://localhost:3000",
+        "http://fileprocessor.netlify.app",
+        "https://fileprocessor.netlify.app"
+        # Add more trusted origins as needed
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-Base.metadata.create_all(bind=engine)
 
-# Include routers with tags for Swagger grouping
+# **Include routers with tags for Swagger grouping**
 app.include_router(auth_router.router)
 app.include_router(config.router)
 app.include_router(prompts.router)
@@ -58,6 +67,9 @@ app.include_router(errors.router)
 # app.include_router(claude_callback.router)
 app.include_router(ws_results.router)
 app.include_router(usage.router)
+
+# **Create all tables after models are imported**
+Base.metadata.create_all(bind=engine)
 
 @app.get("/", summary="Root Endpoint")
 def read_root():
@@ -81,9 +93,7 @@ def keep_alive():
 
 @app.on_event("startup")
 async def startup_event():
-    # Create all tables
-    Base.metadata.create_all(bind=engine)
-    print("Database tables created successfully.")
+    print("Application has started and is ready to accept requests.")
 
     # Customize OpenAPI schema for Swagger UI
     if not app.openapi_schema:

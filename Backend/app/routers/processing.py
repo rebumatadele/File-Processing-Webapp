@@ -9,6 +9,8 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from datetime import datetime
 
+from app.dependencies.rate_limiters import get_all_rate_limiters
+from app.utils.rate_limiter import RateLimiter
 from app.models.file import UploadedFile
 from app.dependencies.database import get_db
 from app.models.user import User
@@ -44,7 +46,9 @@ active_tasks: Dict[str, "asyncio.Task"] = {}
 async def start_processing(
     settings: ProcessingSettings,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    rate_limiters: Dict[str, RateLimiter] = Depends(get_all_rate_limiters)  # Inject rate limiters
+
 ):
     """
     POST endpoint to start an async background job. 
@@ -82,7 +86,9 @@ async def start_processing(
                 task_id=task_id,
                 job_id=new_job.id,
                 settings=settings,
-                user_id=current_user.id
+                user_id=current_user.id,
+                rate_limiters=rate_limiters
+
             )
         )
         active_tasks[task_id] = task
@@ -98,7 +104,7 @@ async def start_processing(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-async def process_texts_task(task_id: str, job_id: str, settings: ProcessingSettings, user_id: str):
+async def process_texts_task(task_id: str, job_id: str, settings: ProcessingSettings, user_id: str, rate_limiters: Dict[str, RateLimiter]):
     """
     **Async** background routine:
       1) Looks up the job & files in DB
@@ -217,7 +223,9 @@ async def process_texts_task(task_id: str, job_id: str, settings: ProcessingSett
                     content=content,
                     settings=settings,
                     api_keys=api_keys,
-                    concurrency_limit=concurrency_limit
+                    concurrency_limit=concurrency_limit,
+                    rate_limiters=rate_limiters
+
                 )
             )
 
@@ -303,7 +311,9 @@ async def process_single_file(
     content: str,
     settings: ProcessingSettings,
     api_keys: Dict[str, str],
-    concurrency_limit: asyncio.Semaphore
+    concurrency_limit: asyncio.Semaphore,
+    rate_limiters: Dict[str, RateLimiter]
+
 ):
     try:
         print(f"[ClaudeDEBUG] Start file: {file_status.filename} with chunk_by={settings.chunk_by} chunk_size={settings.chunk_size}")
@@ -324,7 +334,7 @@ async def process_single_file(
             raise Exception(f"Uploaded file '{file_status.filename}' not found.")
 
         uploaded_file_id = uploaded_file.id
-
+        
         async with concurrency_limit:
             responses = await process_text_stream(
                 text=content,
@@ -336,7 +346,9 @@ async def process_single_file(
                 api_keys=api_keys,
                 user_id=file_status.user_id,
                 db=db,
+                rate_limiters=rate_limiters,
                 progress_callback=on_chunk_processed
+
             )
 
         print(f"[ClaudeDEBUG] Done processing chunks for {file_status.filename}, # responses={len(responses)}")

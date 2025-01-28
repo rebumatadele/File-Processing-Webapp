@@ -1,22 +1,34 @@
 # app/providers/anthropic_provider.py
 
+import os
+import errno
 import asyncio
 from curl_cffi.requests import post
 from curl_cffi.requests.exceptions import CurlError, HTTPError, ConnectionError, Timeout
 from app.utils.retry_decorator import retry
 from app.utils.error_utils import handle_error
-from app.utils.rate_limiter import rate_limiter_instance
 from typing import Tuple, Dict, Any
 
+from app.utils.rate_limiter import RateLimiter
+
+# Define Anthropic-specific exceptions
 ANTHROPIC_EXCEPTIONS = (CurlError, HTTPError, ConnectionError, Timeout)
 
-@retry(max_retries=3, initial_wait=2, backoff_factor=2, exceptions=ANTHROPIC_EXCEPTIONS)
-async def generate_with_anthropic(prompt: str, api_key: str, model_choice: str) -> str:
+# Define rate-limiting status codes to handle 'Retry-After'
+RATE_LIMIT_STATUS_CODES = {429, 503, 529}
+
+@retry(max_retries=10, initial_wait=2, backoff_factor=2, exceptions=ANTHROPIC_EXCEPTIONS)
+async def generate_with_anthropic(
+    prompt: str,
+    api_key: str,
+    model_choice: str,
+    rate_limiter: RateLimiter
+) -> str:
     """
     High-level asynchronous function to call Anthropic API with rate limiting.
     Returns the concatenated text from the response.
     """
-    await rate_limiter_instance.acquire()
+    await rate_limiter.acquire()
 
     print("[Anthropic] Starting request with prompt length:", len(prompt))
 
@@ -28,16 +40,16 @@ async def generate_with_anthropic(prompt: str, api_key: str, model_choice: str) 
 
         print(f"[Anthropic] Response status={status}  len(content)={len(content)}")
 
-        # If rate limited, check for Retry-After and wait
-        if status == 429:
+        # If status code is in rate-limiting codes, handle 'Retry-After'
+        if status in RATE_LIMIT_STATUS_CODES:
             retry_after = headers.get("retry-after")
             if retry_after:
                 try:
                     wait_seconds = float(retry_after)
                 except ValueError:
-                    wait_seconds = 10.0  # fallback
-                handle_error("RateLimit", f"Received 429. Waiting {wait_seconds} seconds before retry.")
-                print(f"[Anthropic] 429 Too Many Requests. Sleeping {wait_seconds}s, then retry once more.")
+                    wait_seconds = rate_limiter.cooldown_period  # Fallback
+                handle_error("RateLimit", f"Received {status}. Waiting {wait_seconds} seconds before retry.")
+                print(f"[Anthropic] {status} Received. Sleeping {wait_seconds}s before retrying.")
                 await asyncio.sleep(wait_seconds)
                 # Retry the request once more after waiting
                 content, headers, status = await asyncio.to_thread(
@@ -52,7 +64,7 @@ async def generate_with_anthropic(prompt: str, api_key: str, model_choice: str) 
             raise HTTPError(f"Anthropic returned unexpected status: {status}")
 
         # Update rate limiter with new header info
-        await rate_limiter_instance.update_from_anthropic_headers(headers)
+        await rate_limiter.update_from_headers(headers)
 
         if status != 200:
             handle_error("APIError", f"Anthropic returned unexpected status: {status}")
@@ -65,6 +77,7 @@ async def generate_with_anthropic(prompt: str, api_key: str, model_choice: str) 
         print(f"[Anthropic] Exception: {e}")
         handle_error("APIError", f"Failed in generate_with_anthropic: {e}")
         raise
+
 
 def generate_with_anthropic_sync(prompt: str, api_key: str, model_choice: str) -> Tuple[str, Dict[str, Any], int]:
     """
@@ -126,6 +139,7 @@ def generate_with_anthropic_sync(prompt: str, api_key: str, model_choice: str) -
         handle_error("APIError", f"Anthropic returned status: {status}")
         print(f"[AnthropicSync] Non-200 status received: {status}")
         return "", response.headers, status
+
 
 def validate_anthropic_api_key(api_key: str) -> bool:
     """

@@ -6,6 +6,8 @@ import asyncio
 import google.generativeai as genai
 from app.utils.retry_decorator import retry
 from app.utils.error_utils import handle_error
+from app.utils.rate_limiter import RateLimiter
+from typing import Tuple, Dict, Any
 
 # Attempt to import specific exceptions; fallback to generic Exception if not available
 try:
@@ -16,27 +18,31 @@ except ImportError:
     GEMINI_EXCEPTIONS = (Exception,)
 
 @retry(max_retries=10, initial_wait=2, backoff_factor=2, exceptions=GEMINI_EXCEPTIONS)
-async def generate_with_gemini(prompt: str, model: str = "gemini-1.5-flash", api_key: str = None) -> str:
+async def generate_with_gemini(prompt: str, model: str = "gemini-1.5-flash", api_key: str = None, rate_limiter: RateLimiter = None) -> str:
     """
-    Asynchronously generates content using the Gemini API.
+    Asynchronously generates content using the Gemini API with rate limiting.
 
     Args:
         prompt (str): The input prompt for content generation.
         model (str, optional): The Gemini model to use. Defaults to "gemini-1.5-flash".
         api_key (str, optional): Your Gemini API key. If not provided, it will be fetched from environment variables.
+        rate_limiter (RateLimiter, optional): The RateLimiter instance to manage rate limits.
 
     Returns:
         str: The generated content or an error message.
     """
+    if rate_limiter:
+        await rate_limiter.acquire()
+
     try:
         # Ensure the API is configured with the provided API key
         if api_key:
             genai.configure(api_key=api_key)
-            model_instance = genai.GenerativeModel(model)
         else:
             # Fallback to environment variable
             genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
-            model_instance = genai.GenerativeModel(model)
+
+        model_instance = genai.GenerativeModel(model)
 
         # Run the synchronous generate_content in a separate thread to avoid blocking
         response = await asyncio.to_thread(model_instance.generate_content, prompt)

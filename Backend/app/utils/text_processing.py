@@ -10,6 +10,7 @@ from app.providers.anthropic_provider import generate_with_anthropic
 from app.providers.gemini_provider import generate_with_gemini
 from app.utils.error_utils import handle_error
 from app.utils.cache_utils import get_cached_result, set_cached_result
+from app.utils.rate_limiter import RateLimiter
 
 async def process_text_stream(
     text: str,
@@ -21,6 +22,7 @@ async def process_text_stream(
     api_keys: Dict[str, str],
     user_id: str,
     db: Session,
+    rate_limiters: Dict[str, RateLimiter],
     progress_callback: Optional[Callable[[], None]] = None
 ) -> List[Dict[str, Any]]:
     """
@@ -43,7 +45,12 @@ async def process_text_stream(
     else:
         raise ValueError("Invalid chunk_by value. Use 'word' or 'character'.")
 
-    # 2) For each chunk, check DB cache or call the AI provider
+    # 2) Retrieve the appropriate RateLimiter for the selected provider
+    rate_limiter = rate_limiters.get(provider_choice.lower())
+    if not rate_limiter:
+        raise ValueError(f"No RateLimiter configured for provider: {provider_choice}")
+
+    # 3) For each chunk, check DB cache or call the AI provider
     responses = []
     for chunk in chunks:
         cached = get_cached_result(db, chunk, provider_choice, model_choice, user_id)
@@ -61,19 +68,19 @@ async def process_text_stream(
                 api_key = api_keys.get("OPENAI_API_KEY")
                 if not api_key:
                     raise HTTPException(status_code=400, detail="OpenAI API key not provided.")
-                response_text = await generate_with_openai(prompt + chunk, model=model_choice)
+                response_text = await generate_with_openai(prompt + chunk, model=model_choice, rate_limiter=rate_limiter, api_key=api_key)
 
             elif provider_choice.lower() == "anthropic":
                 api_key = api_keys.get("ANTHROPIC_API_KEY")
                 if not api_key:
                     raise HTTPException(status_code=400, detail="Anthropic API key not provided.")
-                response_text = await generate_with_anthropic(prompt + chunk, api_key, model_choice)
+                response_text = await generate_with_anthropic(prompt + chunk, api_key, model_choice, rate_limiter=rate_limiter)
 
             elif provider_choice.lower() == "gemini":
                 api_key = api_keys.get("GEMINI_API_KEY")
                 if not api_key:
                     raise HTTPException(status_code=400, detail="Gemini API key not provided.")
-                response_text = await generate_with_gemini(prompt + chunk, model=model_choice, api_key=api_key)
+                response_text = await generate_with_gemini(prompt + chunk, model=model_choice, api_key=api_key, rate_limiter=rate_limiter)
 
             else:
                 raise ValueError(f"Unsupported provider: {provider_choice}")
@@ -82,7 +89,7 @@ async def process_text_stream(
             handle_error("ProviderError", f"Failed generating text via {provider_choice}: {e}", user_id=user_id)
             raise
 
-        # 3) Append to responses & cache the new result
+        # 4) Append to responses & cache the new result
         response_entry = {
             "type": "text",
             "text": response_text

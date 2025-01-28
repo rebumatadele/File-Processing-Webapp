@@ -1,10 +1,12 @@
 # app/providers/openai_provider.py
 
 import os
+import errno
 import httpx
 from typing import Optional
 from app.utils.retry_decorator import retry
 from app.utils.error_utils import handle_error
+from app.utils.rate_limiter import RateLimiter
 
 # Attempt to import specific exceptions; fallback to generic Exception if not available
 try:
@@ -15,8 +17,23 @@ except ImportError:
     OPENAI_EXCEPTIONS = (httpx.HTTPError, )
 
 @retry(max_retries=10, initial_wait=2, backoff_factor=2, exceptions=OPENAI_EXCEPTIONS)
-async def generate_with_openai(prompt: str, model: str = "gpt-4") -> str:
-    api_key = os.getenv("OPENAI_API_KEY")
+async def generate_with_openai(prompt: str, model: str = "gpt-4", api_key: str = None, rate_limiter: RateLimiter = None) -> str:
+    """
+    Asynchronously generates content using OpenAI's API with rate limiting.
+
+    Args:
+        prompt (str): The input prompt for content generation.
+        model (str, optional): The OpenAI model to use. Defaults to "gpt-4".
+        api_key (str, optional): Your OpenAI API key. If not provided, it will be fetched from environment variables.
+        rate_limiter (RateLimiter, optional): The RateLimiter instance to manage rate limits.
+
+    Returns:
+        str: The generated content or an error message.
+    """
+    if rate_limiter:
+        await rate_limiter.acquire()
+
+    api_key = api_key or os.getenv("OPENAI_API_KEY")
     if not api_key:
         handle_error("APIError", "OpenAI API key is not set.")
         return "[OpenAI API key not set.]"

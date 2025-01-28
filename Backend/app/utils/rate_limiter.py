@@ -4,121 +4,166 @@ import asyncio
 import time
 from typing import Any, Dict, Optional
 from datetime import datetime
-from pydantic import BaseModel
+
+from sqlalchemy.orm import Session
+try:
+    from sqlalchemy.exc import StaleDataError  # For SQLAlchemy >=1.4
+except ImportError:
+    try:
+        from sqlalchemy.orm.exc import StaleDataError  # For SQLAlchemy <1.4
+    except ImportError:
+        # If StaleDataError is not found, define a fallback or raise an error
+        StaleDataError = Exception  # Fallback to generic Exception
+        print("StaleDataError not found in SQLAlchemy. Using generic Exception as fallback.")
 
 from app.settings import settings
+from app.models.rate_limiter import RateLimiterModel
+from app.config.database import SessionLocal 
 
 class RateLimiter:
-    def __init__(self):
-        # Local rate limiting parameters
-        self.max_rpm = settings.max_rpm
-        self.max_rph = settings.max_rph
-        self.cooldown_period = settings.cooldown_period
-
+    def __init__(self, provider: str, user_id: str):
+        self.provider = provider
+        self.user_id = user_id  # Store user_id for per-user rate limiting
         self.lock = asyncio.Lock()
-        self.reset_time_rpm = time.time() + 60
-        self.reset_time_rph = time.time() + 3600
-        self.request_count_rpm = 0
-        self.request_count_rph = 0
+        self.session_factory = SessionLocal  # Reference to the sessionmaker
 
-        # Anthropic rate limit status storage
-        self.requests_limit: Optional[int] = None
-        self.requests_remaining: Optional[int] = None
-        self.requests_reset_time: Optional[datetime] = None
-
-        self.tokens_limit: Optional[int] = None
-        self.tokens_remaining: Optional[int] = None
-        self.tokens_reset_time: Optional[datetime] = None
-
-        self.input_tokens_limit: Optional[int] = None
-        self.input_tokens_remaining: Optional[int] = None
-        self.input_tokens_reset_time: Optional[datetime] = None
-
-        self.output_tokens_limit: Optional[int] = None
-        self.output_tokens_remaining: Optional[int] = None
-        self.output_tokens_reset_time: Optional[datetime] = None
-
-        self.last_retry_after: Optional[float] = None
+    def _get_or_create_rate_limiter(self, session: Session) -> RateLimiterModel:
+        rate_limiter = session.query(RateLimiterModel).filter_by(provider=self.provider, user_id=self.user_id).first()
+        if not rate_limiter:
+            rate_limiter = RateLimiterModel(
+                provider=self.provider,
+                user_id=self.user_id,
+                max_rpm=settings.max_rpm,
+                max_rph=settings.max_rph,
+                cooldown_period=settings.cooldown_period,
+                reset_time_rpm=time.time() + 60,
+                reset_time_rph=time.time() + 3600,
+                request_count_rpm=0,
+                request_count_rph=0
+            )
+            session.add(rate_limiter)
+            session.commit()
+            session.refresh(rate_limiter)
+        return rate_limiter
 
     async def acquire(self):
         async with self.lock:
-            now = time.time()
-
-            if now >= self.reset_time_rpm:
-                self.reset_time_rpm = now + 60
-                self.request_count_rpm = 0
-
-            if now >= self.reset_time_rph:
-                self.reset_time_rph = now + 3600
-                self.request_count_rph = 0
-
-            # If rate limits exceeded, wait for cooldown_period or last_retry_after if set
-            if (self.request_count_rpm >= self.max_rpm) or (self.request_count_rph >= self.max_rph):
-                wait_time = self.last_retry_after or self.cooldown_period
-                await asyncio.sleep(wait_time)
-                now2 = time.time()
-                self.reset_time_rpm = now2 + 60
-                self.reset_time_rph = now2 + 3600
-                self.request_count_rpm = 0
-                self.request_count_rph = 0
-
-            self.request_count_rpm += 1
-            self.request_count_rph += 1
-
-    async def update_from_anthropic_headers(self, headers: Dict[str, Any]):
-        async with self.lock:
-            # Update requests-related data
-            self.requests_limit = self._safe_int(headers.get('anthropic-ratelimit-requests-limit'))
-            self.requests_remaining = self._safe_int(headers.get('anthropic-ratelimit-requests-remaining'))
-            self.requests_reset_time = self._parse_datetime(headers.get('anthropic-ratelimit-requests-reset'))
-
-            # Update tokens-related data
-            self.tokens_limit = self._safe_int(headers.get('anthropic-ratelimit-tokens-limit'))
-            self.tokens_remaining = self._safe_int(headers.get('anthropic-ratelimit-tokens-remaining'))
-            self.tokens_reset_time = self._parse_datetime(headers.get('anthropic-ratelimit-tokens-reset'))
-
-            self.input_tokens_limit = self._safe_int(headers.get('anthropic-ratelimit-input-tokens-limit'))
-            self.input_tokens_remaining = self._safe_int(headers.get('anthropic-ratelimit-input-tokens-remaining'))
-            self.input_tokens_reset_time = self._parse_datetime(headers.get('anthropic-ratelimit-input-tokens-reset'))
-
-            self.output_tokens_limit = self._safe_int(headers.get('anthropic-ratelimit-output-tokens-limit'))
-            self.output_tokens_remaining = self._safe_int(headers.get('anthropic-ratelimit-output-tokens-remaining'))
-            self.output_tokens_reset_time = self._parse_datetime(headers.get('anthropic-ratelimit-output-tokens-reset'))
-
-            # Check for Retry-After header for special wait times
-            retry_after = headers.get('retry-after')
-            if retry_after:
+            success = False
+            while not success:
+                session = self.session_factory()
                 try:
-                    self.last_retry_after = float(retry_after)
-                except ValueError:
-                    self.last_retry_after = None
+                    rate_limiter = self._get_or_create_rate_limiter(session)
+                    now = time.time()
 
-    def get_current_limits(self) -> Dict[str, Any]:
+                    if now >= rate_limiter.reset_time_rpm:
+                        rate_limiter.reset_time_rpm = now + 60
+                        rate_limiter.request_count_rpm = 0
+
+                    if now >= rate_limiter.reset_time_rph:
+                        rate_limiter.reset_time_rph = now + 3600
+                        rate_limiter.request_count_rph = 0
+
+                    # If rate limits exceeded, wait for cooldown_period or last_retry_after if set
+                    if (rate_limiter.request_count_rpm >= rate_limiter.max_rpm) or \
+                       (rate_limiter.request_count_rph >= rate_limiter.max_rph):
+                        wait_time = rate_limiter.last_retry_after or rate_limiter.cooldown_period
+                        await asyncio.sleep(wait_time)
+                        now = time.time()
+                        rate_limiter.reset_time_rpm = now + 60
+                        rate_limiter.reset_time_rph = now + 3600
+                        rate_limiter.request_count_rpm = 0
+                        rate_limiter.request_count_rph = 0
+
+                    rate_limiter.request_count_rpm += 1
+                    rate_limiter.request_count_rph += 1
+
+                    # Increment version for optimistic locking
+                    rate_limiter.version += 1
+
+                    session.commit()
+                    success = True
+                except StaleDataError:
+                    session.rollback()
+                    # Retry fetching the updated rate limiter
+                except Exception as e:
+                    session.rollback()
+                    print(f"Unexpected error during rate limiting: {e}")
+                    raise e
+                finally:
+                    session.close()
+
+    async def update_from_headers(self, headers: Dict[str, Any]):
+        async with self.lock:
+            success = False
+            while not success:
+                session = self.session_factory()
+                try:
+                    rate_limiter = self._get_or_create_rate_limiter(session)
+
+                    # Update AI provider rate limit data
+                    ai_usage = rate_limiter.ai_usage or {}
+                    # Adjust the keys based on actual headers from the provider
+                    # Example for Anthropic headers:
+                    ai_usage['requests_limit'] = self._safe_int(headers.get('anthropic-ratelimit-requests-limit'))
+                    ai_usage['requests_remaining'] = self._safe_int(headers.get('anthropic-ratelimit-requests-remaining'))
+                    ai_usage['requests_reset_time'] = self._parse_datetime(headers.get('anthropic-ratelimit-requests-reset')).isoformat() if self._parse_datetime(headers.get('anthropic-ratelimit-requests-reset')) else None
+
+                    ai_usage['tokens_limit'] = self._safe_int(headers.get('anthropic-ratelimit-tokens-limit'))
+                    ai_usage['tokens_remaining'] = self._safe_int(headers.get('anthropic-ratelimit-tokens-remaining'))
+                    ai_usage['tokens_reset_time'] = self._parse_datetime(headers.get('anthropic-ratelimit-tokens-reset')).isoformat() if self._parse_datetime(headers.get('anthropic-ratelimit-tokens-reset')) else None
+
+                    ai_usage['input_tokens_limit'] = self._safe_int(headers.get('anthropic-ratelimit-input-tokens-limit'))
+                    ai_usage['input_tokens_remaining'] = self._safe_int(headers.get('anthropic-ratelimit-input-tokens-remaining'))
+                    ai_usage['input_tokens_reset_time'] = self._parse_datetime(headers.get('anthropic-ratelimit-input-tokens-reset')).isoformat() if self._parse_datetime(headers.get('anthropic-ratelimit-input-tokens-reset')) else None
+
+                    ai_usage['output_tokens_limit'] = self._safe_int(headers.get('anthropic-ratelimit-output-tokens-limit'))
+                    ai_usage['output_tokens_remaining'] = self._safe_int(headers.get('anthropic-ratelimit-output-tokens-remaining'))
+                    ai_usage['output_tokens_reset_time'] = self._parse_datetime(headers.get('anthropic-ratelimit-output-tokens-reset')).isoformat() if self._parse_datetime(headers.get('anthropic-ratelimit-output-tokens-reset')) else None
+
+                    rate_limiter.ai_usage = ai_usage
+
+                    # Handle Retry-After header
+                    retry_after = headers.get('retry-after')
+                    if retry_after:
+                        try:
+                            rate_limiter.last_retry_after = float(retry_after)
+                        except ValueError:
+                            rate_limiter.last_retry_after = None
+
+                    # Increment version for optimistic locking
+                    rate_limiter.version += 1
+
+                    session.commit()
+                    success = True
+                except StaleDataError:
+                    session.rollback()
+                    # Retry fetching the updated rate limiter
+                except Exception as e:
+                    session.rollback()
+                    print(f"Unexpected error during updating from headers: {e}")
+                    raise e
+                finally:
+                    session.close()
+
+    def get_current_limits(self, db: Session) -> Dict[str, Any]:
+        """
+        Retrieves the current rate limits and usage.
+        """
+        rate_limiter = db.query(RateLimiterModel).filter_by(provider=self.provider, user_id=self.user_id).first()
+        if not rate_limiter:
+            return {}
         return {
             "local_usage": {
-                "max_rpm": self.max_rpm,
-                "max_rph": self.max_rph,
-                "current_rpm": self.request_count_rpm,
-                "current_rph": self.request_count_rph,
-                "reset_time_rpm": self.reset_time_rpm,
-                "reset_time_rph": self.reset_time_rph,
-                "cooldown_period": self.cooldown_period,
-                "last_retry_after": self.last_retry_after,
+                "max_rpm": rate_limiter.max_rpm,
+                "max_rph": rate_limiter.max_rph,
+                "current_rpm": rate_limiter.request_count_rpm,
+                "current_rph": rate_limiter.request_count_rph,
+                "reset_time_rpm": rate_limiter.reset_time_rpm,
+                "reset_time_rph": rate_limiter.reset_time_rph,
+                "cooldown_period": rate_limiter.cooldown_period,
+                "last_retry_after": rate_limiter.last_retry_after,
             },
-            "anthropic_usage": {
-                "requests_limit": self.requests_limit,
-                "requests_remaining": self.requests_remaining,
-                "requests_reset_time": self.requests_reset_time.isoformat() if self.requests_reset_time else None,
-                "tokens_limit": self.tokens_limit,
-                "tokens_remaining": self.tokens_remaining,
-                "tokens_reset_time": self.tokens_reset_time.isoformat() if self.tokens_reset_time else None,
-                "input_tokens_limit": self.input_tokens_limit,
-                "input_tokens_remaining": self.input_tokens_remaining,
-                "input_tokens_reset_time": self.input_tokens_reset_time.isoformat() if self.input_tokens_reset_time else None,
-                "output_tokens_limit": self.output_tokens_limit,
-                "output_tokens_remaining": self.output_tokens_remaining,
-                "output_tokens_reset_time": self.output_tokens_reset_time.isoformat() if self.output_tokens_reset_time else None,
-            }
+            "ai_usage": rate_limiter.ai_usage or {}
         }
 
     def _safe_int(self, value: Optional[str]) -> Optional[int]:
@@ -137,6 +182,3 @@ class RateLimiter:
             return datetime.fromisoformat(dt_str)
         except Exception:
             return None
-
-# Instantiate a global RateLimiter
-rate_limiter_instance = RateLimiter()
