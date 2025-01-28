@@ -15,7 +15,7 @@ from app.utils.rate_limiter import RateLimiter
 ANTHROPIC_EXCEPTIONS = (CurlError, HTTPError, ConnectionError, Timeout)
 
 # Define rate-limiting status codes to handle 'Retry-After'
-RATE_LIMIT_STATUS_CODES = {429, 503, 529}
+RATE_LIMIT_STATUS_CODES = {429, 503, 529, 500}
 
 @retry(max_retries=10, initial_wait=2, backoff_factor=2, exceptions=ANTHROPIC_EXCEPTIONS)
 async def generate_with_anthropic(
