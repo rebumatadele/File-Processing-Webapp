@@ -80,14 +80,15 @@ def load_uploaded_file_content(session: Session, filename: str, user_id: str) ->
         handle_error("ProcessingError", f"Failed to load uploaded file '{filename}': {e}", user_id=user_id)
         return ""
 
-def update_file_content(
+def update_file_content_with_new_key(
     session: Session,
     filename: str,
-    new_plaintext: str,
+    new_encrypted_content_b64: str,
+    new_encryption_key_b64: str,
     user_id: str
 ):
     """
-    Re-encrypt the new plaintext with the **existing key** so DB remains consistent.
+    Updates both the encrypted content and encryption key of a file in the database.
     """
     try:
         sanitized = sanitize_file_name(filename)
@@ -100,23 +101,9 @@ def update_file_content(
             handle_error("FileNotFound", f"Uploaded file '{filename}' not found in DB.", user_id=user_id)
             raise HTTPException(status_code=404, detail=f"File '{filename}' not found.")
 
-        # 1) decode key from base64
-        key_bytes = base64_to_bytes(file_record.encryption_key)
-
-        new_plain_bytes = new_plaintext.encode("utf-8")
-
-        # MUST match length of key if we want to re-use the same XOR key
-        if len(new_plain_bytes) != len(key_bytes):
-            raise HTTPException(
-                status_code=400,
-                detail="Cannot update with new content length != original. (XOR key mismatch)"
-            )
-
-        # 2) XOR new plaintext
-        new_encrypted_bytes = xor_bytes(new_plain_bytes, key_bytes)
-
-        # 3) convert back to base64
-        file_record.encrypted_content = bytes_to_base64(new_encrypted_bytes)
+        # Update the record with the new encrypted content and new key
+        file_record.encrypted_content = new_encrypted_content_b64
+        file_record.encryption_key = new_encryption_key_b64
 
         session.commit()
 
@@ -126,6 +113,7 @@ def update_file_content(
         handle_error("ProcessingError", f"Failed to update file '{filename}': {e}", user_id=user_id)
         session.rollback()
         raise
+
 def delete_all_files(session: Session, user_id: str):
     """
     Deletes all 'UploadedFile' and 'ProcessedFile' rows for the user from the DB.

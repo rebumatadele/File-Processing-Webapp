@@ -6,14 +6,14 @@ from sqlalchemy.orm import Session
 from app.models.user import User
 from app.providers.auth import get_current_user
 from app.dependencies.database import get_db
-from app.schemas.file_schemas import FileContentSchema
+from app.schemas.file_schemas import EditFileContentRequest, FileContentSchema
 from app.utils.error_utils import handle_error
 from app.utils.file_utils import (
     delete_specific_file,
     save_uploaded_file,
     get_uploaded_files,
     load_uploaded_file_content,
-    update_file_content,
+    update_file_content_with_new_key,
     delete_all_files,
     get_uploaded_files_size,
     get_processed_files_size
@@ -109,16 +109,19 @@ def get_file_content(
 @router.put("/{filename}", summary="Edit File Content")
 def edit_file_content(
     filename: str,
-    new_content: str,
+    request: EditFileContentRequest,  # Receive from request body
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
-    The front-end must supply new_content of the SAME length if re-using the same XOR key.
+    Edits the content of a specific uploaded file by updating both the encryption key and encrypted content.
     """
     try:
-        update_file_content(db, filename, new_content, user_id=current_user.id)
+        # Update the file with the new encrypted content and new key
+        update_file_content_with_new_key(db, filename, request.encrypted_file, request.file_key, user_id=current_user.id)
         return {"message": f"File '{filename}' updated successfully (XOR)."}
+    except HTTPException as he:
+        raise he
     except Exception as e:
         handle_error("ProcessingError", f"Failed to update file: {e}", user_id=current_user.id)
         raise HTTPException(status_code=500, detail=f"Failed to update file: {e}")

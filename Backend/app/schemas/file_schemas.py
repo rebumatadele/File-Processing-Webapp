@@ -26,3 +26,6 @@ class ProcessedFileSchema(BaseModel):
 class FileContentSchema(BaseModel):
     filename: str
     content: str
+class EditFileContentRequest(BaseModel):
+    encrypted_file: str
+    file_key: str

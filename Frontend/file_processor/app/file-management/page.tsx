@@ -11,7 +11,7 @@ import { Loader2, Upload, Trash2, Save, FileText, FolderOpen, Edit2 } from 'luci
 import {
   listFiles,
   getFileContent,
-  editFileContent,
+  editFileContentWithNewKey,
   clearFiles,
   deleteFile,
   // 1) <-- Import our new function
@@ -109,7 +109,7 @@ export default function FileManagementPage() {
 
     setIsLoading(true)
     try {
-      await editFileContent(selectedFile, fileContent)
+      await editFileContentWithNewKey(selectedFile, fileContent)
       toast({
         title: "File updated",
         description: "Your changes have been saved successfully.",
