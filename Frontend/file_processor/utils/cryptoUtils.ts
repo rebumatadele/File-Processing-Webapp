@@ -17,15 +17,36 @@ export async function readFileAsUint8Array(file: File): Promise<Uint8Array> {
     });
   }
   
-  /**
-   * Generates a random Uint8Array of a specified length.
-   */
-  export function generateRandomKey(length: number): Uint8Array {
-    // Uses the Web Crypto API for cryptographically secure random values
-    const keyArray = new Uint8Array(length);
-    window.crypto.getRandomValues(keyArray);
-    return keyArray;
+/**
+ * Generates a random Uint8Array of a specified length.
+ * Uses window.crypto.getRandomValues if available for cryptographic security.
+ * Falls back to Math.random if window.crypto.getRandomValues is unavailable.
+ * 
+ * @param {number} length - The length of the key to generate.
+ * @returns {Uint8Array} - The generated random key.
+ */
+export function generateRandomKey(length: number): Uint8Array {
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+    try {
+      const keyArray = new Uint8Array(length);
+      window.crypto.getRandomValues(keyArray);
+      console.log("Secure random key generated using window.crypto.getRandomValues");
+      return keyArray;
+    } catch (err) {
+      console.warn("window.crypto.getRandomValues failed, falling back to Math.random", err);
+      // Proceed to fallback
+    }
   }
+
+  // Fallback: Less secure random key generation
+  console.warn("window.crypto.getRandomValues not available. Generating key using Math.random (Not secure)");
+  const keyArray = new Uint8Array(length);
+  for (let i = 0; i < length; i++) {
+    keyArray[i] = Math.floor(Math.random() * 256);
+  }
+  return keyArray;
+}
+  
   
   /**
    * XORs data with a key (must be the same length).

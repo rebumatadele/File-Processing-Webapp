@@ -8,17 +8,16 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "@/hooks/use-toast"
 import { Loader2, Upload, Trash2, Save, FileText, FolderOpen, Edit2 } from 'lucide-react'
-import { listFiles, getFileContent, editFileContent, clearFiles, deleteFile } from '@/api/fileUtils'
-import axiosInstance from '@/api/axiosInstance' // Make sure you have an axiosInstance
+import {
+  listFiles,
+  getFileContent,
+  editFileContent,
+  clearFiles,
+  deleteFile,
+  // 1) <-- Import our new function
+  uploadXorEncryptedFiles,
+} from '@/api/fileUtils'
 import { FileContentResponse } from '@/types/apiTypes'
-
-// -- Crypto utility imports --
-import { 
-  readFileAsUint8Array, 
-  generateRandomKey, 
-  xorData, 
-  toBase64 
-} from '@/utils/cryptoUtils'
 
 export default function FileManagementPage() {
   const [files, setFiles] = useState<File[]>([])
@@ -55,51 +54,16 @@ export default function FileManagementPage() {
   }
 
   /**
-   * Upload files with XOR encryption:
-   * 1. Read each file as ArrayBuffer -> Uint8Array
-   * 2. Generate random key (same length)
-   * 3. XOR the file contents
-   * 4. Convert XORed data & key to base64
-   * 5. Send to server via FormData
+   * Now we simply call `uploadXorEncryptedFiles(files)`
+   * The XOR encryption logic has been moved into the utility.
    */
   const handleUpload = async () => {
     if (files.length === 0) return
 
     setIsLoading(true)
     try {
-      const formData = new FormData()
-
-      for (const file of files) {
-        // 1) Read file into memory as bytes
-        const fileBytes = await readFileAsUint8Array(file)
-
-        // 2) Generate random key of the same length
-        const randomKey = generateRandomKey(fileBytes.length)
-
-        // 3) XOR to get encrypted bytes
-        const encryptedBytes = xorData(fileBytes, randomKey)
-
-        // 4) Convert both to base64
-        const encryptedBase64 = toBase64(encryptedBytes)
-        const keyBase64 = toBase64(randomKey)
-
-        // 5) Append to FormData:
-        //    - We'll send the filename as normal
-        //    - The XORed data under 'encrypted_file'
-        //    - The key under 'file_key'
-        // You can choose any field names you want.
-        formData.append('filename', file.name)
-        formData.append('encrypted_file', encryptedBase64)
-        formData.append('file_key', keyBase64)
-      }
-
-      // Post to your server endpoint (e.g., /files/upload)
-      // Make sure your backend is expecting these FormData fields!
-      await axiosInstance.post('/files/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      })
+      // 2) <-- Call our new utility
+      await uploadXorEncryptedFiles(files)
 
       toast({
         title: "Files uploaded",
@@ -187,7 +151,7 @@ export default function FileManagementPage() {
   const handleDeleteFile = async (filename: string) => {
     const confirmDelete = window.confirm(`Are you sure you want to delete '${filename}'?`)
     if (!confirmDelete) return
-  
+
     setIsLoading(true)
     try {
       const response = await deleteFile(filename)
@@ -198,7 +162,7 @@ export default function FileManagementPage() {
         })
         // Refresh the file list
         await fetchFiles()
-  
+
         // If the deleted file was selected, clear the selection
         if (selectedFile === filename) {
           setSelectedFile(null)
@@ -233,6 +197,7 @@ export default function FileManagementPage() {
           </CardTitle>
           <CardDescription>Upload, view, edit, and manage your files.</CardDescription>
         </CardHeader>
+
         <CardContent className="p-6 space-y-6">
           <Card className="bg-secondary/5">
             <CardContent className="p-4">
@@ -259,6 +224,7 @@ export default function FileManagementPage() {
               </div>
             </CardContent>
           </Card>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card className="h-[400px] flex flex-col">
               <CardHeader className="bg-muted/50">
@@ -270,7 +236,9 @@ export default function FileManagementPage() {
               <CardContent className="flex-grow overflow-hidden p-0">
                 <ScrollArea className="h-full p-4">
                   {uploadedFiles.length === 0 ? (
-                    <p className="text-muted-foreground text-center py-4">No files uploaded yet.</p>
+                    <p className="text-muted-foreground text-center py-4">
+                      No files uploaded yet.
+                    </p>
                   ) : (
                     uploadedFiles.map((file) => (
                       <div key={file} className="flex items-center justify-between mb-2">
@@ -299,6 +267,7 @@ export default function FileManagementPage() {
                 </ScrollArea>
               </CardContent>
             </Card>
+
             <Card className="h-[400px] flex flex-col">
               <CardHeader className="bg-muted/50">
                 <CardTitle className="text-lg font-semibold flex items-center gap-2">
@@ -312,7 +281,11 @@ export default function FileManagementPage() {
                   onChange={(e) => setFileContent(e.target.value)}
                   disabled={!isEditing || isLoading}
                   className="flex-grow resize-none"
-                  placeholder={selectedFile ? "Loading content..." : "Select a file to view its content"}
+                  placeholder={
+                    selectedFile
+                      ? "Loading content..."
+                      : "Select a file to view its content"
+                  }
                 />
               </CardContent>
               <CardFooter className="bg-muted/30 rounded-b-lg flex justify-end space-x-2 p-2">
@@ -328,7 +301,10 @@ export default function FileManagementPage() {
                         Save
                       </Button>
                     ) : (
-                      <Button onClick={() => setIsEditing(true)} disabled={isLoading}>
+                      <Button
+                        onClick={() => setIsEditing(true)}
+                        disabled={isLoading}
+                      >
                         <Edit2 className="mr-2 h-4 w-4" />
                         Edit
                       </Button>
@@ -339,6 +315,7 @@ export default function FileManagementPage() {
             </Card>
           </div>
         </CardContent>
+
         <CardFooter className="bg-muted/10 rounded-b-lg flex justify-between p-4">
           <Button variant="destructive" onClick={handleClearFiles} disabled={isLoading}>
             {isLoading ? (
