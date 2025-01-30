@@ -4,13 +4,13 @@ from datetime import datetime
 import re
 from typing import Optional, List, Dict, Any, Union
 import os
-
+from typing import Optional, List, Dict
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from app.models.prompt import Prompt
 from app.models.file import UploadedFile, ProcessedFile
 from app.utils.error_utils import handle_error
-from app.utils.cache_utils import get_cached_result, set_cached_result
+from app.utils.encryption_utils import xor_bytes, base64_to_bytes, bytes_to_base64
 
 def sanitize_file_name(file_name: str) -> str:
     """
@@ -21,29 +21,31 @@ def sanitize_file_name(file_name: str) -> str:
 def save_uploaded_file(
     session: Session,
     filename: str,
-    content: str,
+    encrypted_data_b64: str,
+    encryption_key_b64: str,
     user_id: str
 ):
     """
-    Saves an uploaded file in the DB (UploadedFile table).
+    Saves an XOR-encrypted file (both data + key in base64) to the DB.
     """
     try:
         sanitized = sanitize_file_name(filename)
+
         new_file = UploadedFile(
             user_id=user_id,
             filename=sanitized,
-            content=content
+            encrypted_content=encrypted_data_b64,  # store as-is
+            encryption_key=encryption_key_b64
         )
         session.add(new_file)
         session.commit()
+
     except Exception as e:
         handle_error("ProcessingError", f"Failed to save uploaded file '{filename}': {e}", user_id=user_id)
         session.rollback()
+        raise
 
 def get_uploaded_files(session: Session, user_id: str) -> List[str]:
-    """
-    Returns a list of all uploaded file names from the DB for this user.
-    """
     try:
         files = session.query(UploadedFile).filter_by(user_id=user_id).all()
         return [f.filename for f in files]
@@ -53,7 +55,7 @@ def get_uploaded_files(session: Session, user_id: str) -> List[str]:
 
 def load_uploaded_file_content(session: Session, filename: str, user_id: str) -> str:
     """
-    Loads the content of an uploaded file from the DB.
+    Returns the **decrypted** plaintext content of the file.
     """
     try:
         sanitized = sanitize_file_name(filename)
@@ -61,11 +63,19 @@ def load_uploaded_file_content(session: Session, filename: str, user_id: str) ->
             user_id=user_id,
             filename=sanitized
         ).first()
-        if file_record:
-            return file_record.content
-        else:
+
+        if not file_record:
             handle_error("FileNotFound", f"Uploaded file '{filename}' not found in DB.", user_id=user_id)
             return ""
+
+        # 1) decode from base64
+        encrypted_bytes = base64_to_bytes(file_record.encrypted_content)
+        key_bytes = base64_to_bytes(file_record.encryption_key)
+
+        # 2) XOR to get plaintext
+        plaintext_bytes = xor_bytes(encrypted_bytes, key_bytes)
+        return plaintext_bytes.decode("utf-8", errors="replace")
+
     except Exception as e:
         handle_error("ProcessingError", f"Failed to load uploaded file '{filename}': {e}", user_id=user_id)
         return ""
@@ -73,11 +83,11 @@ def load_uploaded_file_content(session: Session, filename: str, user_id: str) ->
 def update_file_content(
     session: Session,
     filename: str,
-    new_content: str,
+    new_plaintext: str,
     user_id: str
 ):
     """
-    Updates the content of an uploaded file in the DB.
+    Re-encrypt the new plaintext with the **existing key** so DB remains consistent.
     """
     try:
         sanitized = sanitize_file_name(filename)
@@ -85,15 +95,37 @@ def update_file_content(
             user_id=user_id,
             filename=sanitized
         ).first()
+
         if not file_record:
-            handle_error("FileNotFound", f"Uploaded file '{filename}' does not exist in DB.", user_id=user_id)
-            return
-        file_record.content = new_content
+            handle_error("FileNotFound", f"Uploaded file '{filename}' not found in DB.", user_id=user_id)
+            raise HTTPException(status_code=404, detail=f"File '{filename}' not found.")
+
+        # 1) decode key from base64
+        key_bytes = base64_to_bytes(file_record.encryption_key)
+
+        new_plain_bytes = new_plaintext.encode("utf-8")
+
+        # MUST match length of key if we want to re-use the same XOR key
+        if len(new_plain_bytes) != len(key_bytes):
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot update with new content length != original. (XOR key mismatch)"
+            )
+
+        # 2) XOR new plaintext
+        new_encrypted_bytes = xor_bytes(new_plain_bytes, key_bytes)
+
+        # 3) convert back to base64
+        file_record.encrypted_content = bytes_to_base64(new_encrypted_bytes)
+
         session.commit()
+
+    except HTTPException:
+        raise
     except Exception as e:
         handle_error("ProcessingError", f"Failed to update file '{filename}': {e}", user_id=user_id)
         session.rollback()
-
+        raise
 def delete_all_files(session: Session, user_id: str):
     """
     Deletes all 'UploadedFile' and 'ProcessedFile' rows for the user from the DB.
@@ -144,47 +176,66 @@ def delete_specific_file(session: Session, filename: str, user_id: str):
 def save_processed_result(
     session: Session,
     filename: str,
-    content: str,
-    uploaded_file_id: str
+    plaintext_processed: str,
+    uploaded_file_id: str,
+    reuse_key_b64: str
 ) -> str:
     """
-    Saves a processed result into the DB (ProcessedFile table) and returns the path to the temporary file.
+    Saves the processed result in XOR-encrypted form using the same (or a new) key.
+    For simplicity, let's re-use the same key from the original file.
     """
+    from app.utils.encryption_utils import xor_bytes, base64_to_bytes, bytes_to_base64
+
     try:
         sanitized = sanitize_file_name(filename)
+
+        # 1) Convert plaintext + key to bytes
+        plain_bytes = plaintext_processed.encode("utf-8")
+        key_bytes = base64_to_bytes(reuse_key_b64)
+        if len(plain_bytes) != len(key_bytes):
+            # If the processed text is a different length, you have to generate a new key.
+            # For demonstration, let's do that below if they differ:
+            import os
+            key_bytes = os.urandom(len(plain_bytes))
+
+        # 2) XOR to encrypt
+        enc_bytes = xor_bytes(plain_bytes, key_bytes)
+
+        # 3) Base64
+        enc_b64 = bytes_to_base64(enc_bytes)
+        key_b64 = bytes_to_base64(key_bytes)
+
         new_processed = ProcessedFile(
             uploaded_file_id=uploaded_file_id,
             filename=sanitized,
-            content=content,
-            processed_at=datetime.utcnow()
+            encrypted_content=enc_b64,
+            encryption_key=key_b64,
         )
         session.add(new_processed)
         session.commit()
-        print(f"[DB] Successfully saved processed file: {filename}")
 
-        # Save the processed content to a temporary file for attachment
+        # Optionally save a physical text file for reference or emailing:
         tmp_dir = "tmp_processed_files"
         os.makedirs(tmp_dir, exist_ok=True)
         tmp_file_path = os.path.join(tmp_dir, f"{sanitized}_processed.txt")
         with open(tmp_file_path, "w", encoding="utf-8") as f:
-            f.write(content)
-        print(f"[FileUtils] Processed file saved at {tmp_file_path}")
+            f.write(plaintext_processed)
 
-        return tmp_file_path  # Return the path for attachment
+        return tmp_file_path
 
     except Exception as e:
         handle_error("ProcessingError", f"Failed to save processed result for '{filename}': {e}", user_id=None)
-        print(f"[DB] Exception while saving processed file '{filename}': {e}")
         session.rollback()
-        raise  # Re-raise the exception to handle it upstream
+        raise
 
 def get_processed_results(session: Session, user_id: str) -> Dict[str, str]:
     """
-    Retrieves all processed results from the DB for the user, returning a dict {filename: content}.
+    Return {filename: decrypted_content} from ProcessedFile for this user.
     """
     results = {}
     try:
-        # If `ProcessedFile` doesn't store user_id directly, we can join on `UploadedFile`
+        from app.utils.encryption_utils import xor_bytes, base64_to_bytes
+
         processed = (
             session.query(ProcessedFile)
             .join(UploadedFile, ProcessedFile.uploaded_file_id == UploadedFile.id)
@@ -192,25 +243,29 @@ def get_processed_results(session: Session, user_id: str) -> Dict[str, str]:
             .all()
         )
         for p in processed:
-            results[p.filename] = p.content
+            enc_bytes = base64_to_bytes(p.encrypted_content)
+            key_bytes = base64_to_bytes(p.encryption_key)
+            plain_bytes = xor_bytes(enc_bytes, key_bytes)
+            results[p.filename] = plain_bytes.decode("utf-8", errors="replace")
     except Exception as e:
         handle_error("ProcessingError", f"Failed to retrieve processed results: {e}", user_id=user_id)
     return results
 
 def get_uploaded_files_size(session: Session, user_id: str) -> int:
     """
-    Calculates the total byte size of all uploaded files for the user.
+    Sums the size of the *encrypted* data in DB for the user. 
+    (If you want the size of the plaintext, you'll need to do a decrypt first.)
     """
     try:
         files = session.query(UploadedFile).filter_by(user_id=user_id).all()
-        return sum(len(f.content.encode('utf-8')) for f in files)
+        return sum(len(f.encrypted_content.encode('utf-8')) for f in files)
     except Exception as e:
         handle_error("ProcessingError", f"Failed to calculate uploaded files size: {e}", user_id=user_id)
         return 0
 
 def get_processed_files_size(session: Session, user_id: str) -> int:
     """
-    Calculates the total byte size of all processed files for the user.
+    Sums the size of the *encrypted* processed data for the user.
     """
     try:
         processed = (
@@ -219,11 +274,10 @@ def get_processed_files_size(session: Session, user_id: str) -> int:
             .filter(UploadedFile.user_id == user_id)
             .all()
         )
-        return sum(len(p.content.encode('utf-8')) for p in processed)
+        return sum(len(p.encrypted_content.encode('utf-8')) for p in processed)
     except Exception as e:
         handle_error("ProcessingError", f"Failed to calculate processed files size: {e}", user_id=user_id)
         return 0
-
 # =========================
 #  Prompt-Related Functions
 #  (DB-based, no caching)

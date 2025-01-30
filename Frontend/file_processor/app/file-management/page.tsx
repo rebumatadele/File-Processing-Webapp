@@ -1,4 +1,4 @@
-'use client'
+"use client"
 
 import { useState, useEffect } from 'react'
 import { Button } from "@/components/ui/button"
@@ -8,8 +8,17 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { toast } from "@/hooks/use-toast"
 import { Loader2, Upload, Trash2, Save, FileText, FolderOpen, Edit2 } from 'lucide-react'
-import { uploadFiles, listFiles, getFileContent, editFileContent, clearFiles, deleteFile } from '@/api/fileUtils'
+import { listFiles, getFileContent, editFileContent, clearFiles, deleteFile } from '@/api/fileUtils'
+import axiosInstance from '@/api/axiosInstance' // Make sure you have an axiosInstance
 import { FileContentResponse } from '@/types/apiTypes'
+
+// -- Crypto utility imports --
+import { 
+  readFileAsUint8Array, 
+  generateRandomKey, 
+  xorData, 
+  toBase64 
+} from '@/utils/cryptoUtils'
 
 export default function FileManagementPage() {
   const [files, setFiles] = useState<File[]>([])
@@ -45,19 +54,63 @@ export default function FileManagementPage() {
     }
   }
 
+  /**
+   * Upload files with XOR encryption:
+   * 1. Read each file as ArrayBuffer -> Uint8Array
+   * 2. Generate random key (same length)
+   * 3. XOR the file contents
+   * 4. Convert XORed data & key to base64
+   * 5. Send to server via FormData
+   */
   const handleUpload = async () => {
     if (files.length === 0) return
 
     setIsLoading(true)
     try {
-      await uploadFiles(files)
+      const formData = new FormData()
+
+      for (const file of files) {
+        // 1) Read file into memory as bytes
+        const fileBytes = await readFileAsUint8Array(file)
+
+        // 2) Generate random key of the same length
+        const randomKey = generateRandomKey(fileBytes.length)
+
+        // 3) XOR to get encrypted bytes
+        const encryptedBytes = xorData(fileBytes, randomKey)
+
+        // 4) Convert both to base64
+        const encryptedBase64 = toBase64(encryptedBytes)
+        const keyBase64 = toBase64(randomKey)
+
+        // 5) Append to FormData:
+        //    - We'll send the filename as normal
+        //    - The XORed data under 'encrypted_file'
+        //    - The key under 'file_key'
+        // You can choose any field names you want.
+        formData.append('filename', file.name)
+        formData.append('encrypted_file', encryptedBase64)
+        formData.append('file_key', keyBase64)
+      }
+
+      // Post to your server endpoint (e.g., /files/upload)
+      // Make sure your backend is expecting these FormData fields!
+      await axiosInstance.post('/files/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      })
+
       toast({
         title: "Files uploaded",
-        description: "Your files have been successfully uploaded.",
+        description: "Your files have been successfully uploaded (XOR-encrypted).",
       })
+
+      // Refresh the file list
       await fetchFiles()
-      setFiles([])
-    } catch {
+      setFiles([]) // reset
+    } catch (error) {
+      console.error("Upload error:", error)
       toast({
         title: "Error",
         description: "Failed to upload files. Please try again.",
@@ -69,23 +122,23 @@ export default function FileManagementPage() {
   }
 
   const handleSelectFile = async (filename: string) => {
-    setIsLoading(true);
+    setIsLoading(true)
     try {
-      const fileInfo: FileContentResponse = await getFileContent(filename);
-      setSelectedFile(fileInfo.filename);
-      setFileContent(fileInfo.content);
-      setIsEditing(false);
+      const fileInfo: FileContentResponse = await getFileContent(filename)
+      setSelectedFile(fileInfo.filename)
+      setFileContent(fileInfo.content)
+      setIsEditing(false)
     } catch (error) {
-      console.error("Error fetching file content:", error);
+      console.error("Error fetching file content:", error)
       toast({
         title: "Error",
         description: "Failed to fetch file content. Please try again.",
         variant: "destructive",
-      });
+      })
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   const handleSaveContent = async () => {
     if (!selectedFile) return
@@ -132,46 +185,44 @@ export default function FileManagementPage() {
   }
 
   const handleDeleteFile = async (filename: string) => {
-    // Optional: Confirm deletion with the user
-    const confirmDelete = window.confirm(`Are you sure you want to delete '${filename}'?`);
-    if (!confirmDelete) return;
+    const confirmDelete = window.confirm(`Are you sure you want to delete '${filename}'?`)
+    if (!confirmDelete) return
   
-    setIsLoading(true);
+    setIsLoading(true)
     try {
-      const response = await deleteFile(filename);
+      const response = await deleteFile(filename)
       if ('message' in response) {
         toast({
           title: "File Deleted",
           description: response.message,
-        });
+        })
         // Refresh the file list
-        await fetchFiles();
+        await fetchFiles()
   
         // If the deleted file was selected, clear the selection
         if (selectedFile === filename) {
-          setSelectedFile(null);
-          setFileContent('');
+          setSelectedFile(null)
+          setFileContent('')
         }
       } else {
-        // Handle unexpected response structure
         toast({
           title: "Unexpected Response",
           description: "Received an unexpected response from the server.",
           variant: "destructive",
-        });
+        })
       }
     } catch (error) {
-      console.error("Error deleting file:", error);
+      console.error("Error deleting file:", error)
       toast({
         title: "Error",
         description: `Failed to delete file '${filename}'. Please try again.`,
         variant: "destructive",
-      });
+      })
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
-  
+  }
+
   return (
     <div className="container mx-auto py-10">
       <Card className="w-full max-w-4xl mx-auto">
@@ -297,9 +348,7 @@ export default function FileManagementPage() {
             )}
             Clear All Files
           </Button>
-          <Button 
-            onClick={() => window.location.href = "/processing"} 
-          >
+          <Button onClick={() => (window.location.href = "/processing")}>
             Next
           </Button>
         </CardFooter>
