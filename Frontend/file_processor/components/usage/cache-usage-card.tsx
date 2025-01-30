@@ -13,7 +13,14 @@ interface CacheUsageCardProps {
   onClearCache: () => void
 }
 
-export function CacheUsageCard({ data, loading, onClearCache }: CacheUsageCardProps) {
+export function CacheUsageCard({
+  data,
+  loading,
+  onClearCache
+}: CacheUsageCardProps) {
+  // Convert bytes -> kilobytes
+  const sizeInKB = data.size !== null ? (data.size / 1024).toFixed(2) : "N/A"
+
   return (
     <Card className="shadow-lg">
       <CardHeader className="bg-primary/10 rounded-t-lg">
@@ -24,14 +31,13 @@ export function CacheUsageCard({ data, loading, onClearCache }: CacheUsageCardPr
       </CardHeader>
       <CardContent className="p-6">
         <div className="space-y-4">
-          {/* Changed <p> to <div> to avoid invalid nesting */}
           <div className="text-lg font-medium">
             Cache Size:{" "}
             {loading ? (
               <Skeleton className="h-4 w-24 inline-block" />
             ) : (
               <span className="text-primary">
-                {data.size !== null ? `${(data.size / 1024).toFixed(2)} KB` : "N/A"}
+                {sizeInKB !== "N/A" ? `${sizeInKB} KB` : "N/A"}
               </span>
             )}
           </div>
@@ -58,7 +64,12 @@ export function CacheUsageCard({ data, loading, onClearCache }: CacheUsageCardPr
         </div>
       </CardContent>
       <CardFooter className="bg-primary/5 rounded-b-lg">
-        <Button onClick={onClearCache} variant="outline" className="w-full" disabled={loading}>
+        <Button
+          onClick={onClearCache}
+          variant="outline"
+          className="w-full"
+          disabled={loading}
+        >
           {loading ? "Clearing..." : "Clear Cache"}
         </Button>
       </CardFooter>

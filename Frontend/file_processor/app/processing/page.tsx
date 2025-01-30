@@ -1,182 +1,204 @@
-'use client'
+"use client"
 
-import { useState, useEffect } from 'react'
-import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
-import * as z from 'zod'
+import { useState, useEffect } from "react"
+import { useForm } from "react-hook-form"
+import { zodResolver } from "@hookform/resolvers/zod"
+import * as z from "zod"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle
+} from "@/components/ui/card"
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage
+} from "@/components/ui/form"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useToast } from "@/hooks/use-toast"
-import { Loader2, Play, RefreshCw, Eye, EyeOff, Cpu, Zap, Mail, Layers, SplitSquareVertical, Files } from 'lucide-react'
-import { startProcessing, getTaskStatus, getProcessingProgress } from '@/api/processingUtils'
-import { listFiles } from '@/api/fileUtils'
-import { listPrompts, loadPrompt } from '@/api/promptUtils'
-import { getUserConfig } from '@/api/configUtils'
-import { ProcessingSettings, TaskStatusResponse, StartProcessingResponse, GetProcessingProgressResponse } from '@/types/apiTypes'
+import {
+  Loader2,
+  Play,
+  RefreshCw,
+  Eye,
+  EyeOff,
+  Cpu,
+  Zap,
+  Mail,
+  Layers,
+  SplitSquareVertical,
+  Files
+} from "lucide-react"
+import {
+  startProcessing,
+  getTaskStatus,
+  getProcessingProgress
+} from "@/api/processingUtils"
+import { listFiles } from "@/api/fileUtils"
+import { listPrompts, loadPrompt } from "@/api/promptUtils"
+import { getUserConfig } from "@/api/configUtils"
+import {
+  ProcessingSettings,
+  TaskStatusResponse,
+  StartProcessingResponse,
+  GetProcessingProgressResponse
+} from "@/types/apiTypes"
 
 /** Zod Schema */
 const formSchema = z.object({
-  provider_choice: z.enum(['OpenAI', 'Anthropic', 'Gemini']),
-  prompt: z.string().min(1, 'Please select a prompt'),
-  chunk_size: z.number().int().positive().min(1, 'Chunk size must be a positive integer'),
-  chunk_by: z.enum(['word', 'sentence', 'paragraph']),
-  selected_model: z.string().min(1, 'Please select a model'),
-  email: z.string().email('Please enter a valid email address'),
+  provider_choice: z.enum(["OpenAI", "Anthropic", "Gemini"]),
+  prompt: z.string().min(1, "Please select a prompt"),
+  chunk_size: z.number().int().positive().min(1, "Chunk size must be a positive integer"),
+  chunk_by: z.enum(["word", "sentence", "paragraph"]),
+  selected_model: z.string().min(1, "Please select a model"),
+  email: z.string().email("Please enter a valid email address"),
   openai_api_key: z.string().optional(),
   anthropic_api_key: z.string().optional(),
   gemini_api_key: z.string().optional(),
-  selected_files: z.array(z.string()).min(1, 'Please select at least one file'),  // Added field
+  // Required array of file strings:
+  selected_files: z.array(z.string()).min(1, "Please select at least one file")
 }).refine((data) => {
-  if (data.provider_choice === 'OpenAI') return !!data.openai_api_key
-  if (data.provider_choice === 'Anthropic') return !!data.anthropic_api_key
-  if (data.provider_choice === 'Gemini') return !!data.gemini_api_key
+  // Provider-specific API key requirement
+  if (data.provider_choice === "OpenAI") return !!data.openai_api_key
+  if (data.provider_choice === "Anthropic") return !!data.anthropic_api_key
+  if (data.provider_choice === "Gemini") return !!data.gemini_api_key
   return true
 }, {
-  message: 'API Key is required for the selected provider',
-  path: ['api_key'],
-});
+  message: "API Key is required for the selected provider",
+  path: ["api_key"]
+})
 
 const modelOptions = {
-  OpenAI: ['gpt-3.5-turbo', 'gpt-4'],
-  Anthropic: ['claude-3-5-sonnet-20240620', 'claude-3-5'],
-  Gemini: ['gemini-1.5-flash', 'gemini-1.5'],
-};
+  OpenAI: ["gpt-3.5-turbo", "gpt-4"],
+  Anthropic: ["claude-3-5-sonnet-20240620", "claude-3-5"],
+  Gemini: ["gemini-1.5-flash", "gemini-1.5"]
+}
 
 export default function ProcessingPage() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [prompts, setPrompts] = useState<string[]>([]);
-  const [taskId, setTaskId] = useState<string | null>(null);
-  const [jobId, setJobId] = useState<string | null>(null); // New state for job_id
-  const [taskStatus, setTaskStatus] = useState<TaskStatusResponse | null>(null);
-  const [jobProgress, setJobProgress] = useState<GetProcessingProgressResponse | null>(null); // New state for job progress
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [openaiApiKey, setOpenaiApiKey] = useState<string>('');
-  const [anthropicApiKey, setAnthropicApiKey] = useState<string>('');
-  const [geminiApiKey, setGeminiApiKey] = useState<string>('');
-  const [files, setFiles] = useState<string[]>([]);
-  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false)
+  const [prompts, setPrompts] = useState<string[]>([])
+  const [taskId, setTaskId] = useState<string | null>(null)
+  const [jobId, setJobId] = useState<string | null>(null)
+  const [taskStatus, setTaskStatus] = useState<TaskStatusResponse | null>(null)
+  const [jobProgress, setJobProgress] = useState<GetProcessingProgressResponse | null>(null)
+  const [showApiKey, setShowApiKey] = useState(false)
+  const [openaiApiKey, setOpenaiApiKey] = useState<string>("")
+  const [anthropicApiKey, setAnthropicApiKey] = useState<string>("")
+  const [geminiApiKey, setGeminiApiKey] = useState<string>("")
+  const [files, setFiles] = useState<string[]>([])
+
+  const { toast } = useToast()
 
   /** React Hook Form Setup */
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      provider_choice: 'Gemini',
-      prompt: '',
+      provider_choice: "Gemini",
+      prompt: "",
       chunk_size: 200,
-      chunk_by: 'word',
-      selected_model: '',
-      email: '',
-      openai_api_key: '',
-      anthropic_api_key: '',
-      gemini_api_key: '',
-      selected_files: [],  // Initialize selected_files
-    },
-  });
+      chunk_by: "word",
+      selected_model: "",
+      email: "",
+      openai_api_key: "",
+      anthropic_api_key: "",
+      gemini_api_key: "",
+      selected_files: []
+    }
+  })
 
   /** Watch the current provider choice for conditional rendering */
-  const providerChoice = form.watch('provider_choice');
+  const providerChoice = form.watch("provider_choice")
 
-  /** On Mount: fetch prompts, files & retrieve task/job IDs from localStorage */
+  /** On Mount: fetch prompts, files, and retrieve any task/job IDs from localStorage */
   useEffect(() => {
-    fetchPrompts();
-    fetchFiles();
+    fetchPrompts()
+    fetchFiles()
 
-    // **Retrieve taskId and jobId from localStorage**
-    const storedTaskId = localStorage.getItem('taskId');
-    const storedJobId = localStorage.getItem('jobId');
+    const storedTaskId = localStorage.getItem("taskId")
+    const storedJobId = localStorage.getItem("jobId")
 
     if (storedTaskId && storedJobId) {
-      setTaskId(storedTaskId);
-      setJobId(storedJobId);
-      checkTaskStatus(storedTaskId, storedJobId); // Fetch status immediately
+      setTaskId(storedTaskId)
+      setJobId(storedJobId)
+      checkTaskStatus(storedTaskId, storedJobId)
     }
 
     getUserConfig()
       .then((config) => {
-        console.log("Fetched user config:", config);
         if (config) {
-          // Update your local states
-          setOpenaiApiKey(config.openai_api_key || "");
-          setGeminiApiKey(config.gemini_api_key || "");
-          setAnthropicApiKey(config.anthropic_api_key || "");
+          setOpenaiApiKey(config.openai_api_key || "")
+          setGeminiApiKey(config.gemini_api_key || "")
+          setAnthropicApiKey(config.anthropic_api_key || "")
 
-          // Also update the form fields
-          if (config.openai_api_key) {
-            form.setValue("openai_api_key", config.openai_api_key);
-          }
-          if (config.anthropic_api_key) {
-            form.setValue("anthropic_api_key", config.anthropic_api_key);
-          }
-          if (config.gemini_api_key) {
-            form.setValue("gemini_api_key", config.gemini_api_key);
-          }
+          // Update RHF form fields
+          if (config.openai_api_key) form.setValue("openai_api_key", config.openai_api_key)
+          if (config.anthropic_api_key) form.setValue("anthropic_api_key", config.anthropic_api_key)
+          if (config.gemini_api_key) form.setValue("gemini_api_key", config.gemini_api_key)
         }
       })
       .catch((error) => {
-        console.warn("User configuration not found or failed to retrieve.", error);
-      });
-  }, []);
+        console.warn("User configuration not found or failed to retrieve.", error)
+      })
+  }, [])
 
   /** Fetch the list of prompts from the backend */
   const fetchPrompts = async () => {
-    console.log('fetchPrompts -> Called');
     try {
-      const result = await listPrompts();
-      console.log('fetchPrompts -> result:', result);
-
-      // If result has a .prompts array, set that
+      const result = await listPrompts()
+      // Some servers return { prompts: string[] }, some just return string[]
       if (result && Array.isArray(result.prompts)) {
-        setPrompts(result.prompts);
-      }
-      // If result is just an array, set that
-      else if (Array.isArray(result)) {
-        setPrompts(result);
-      }
-      // Otherwise, throw an error for unexpected structure
-      else {
-        throw new Error('Unexpected response structure');
+        setPrompts(result.prompts)
+      } else if (Array.isArray(result)) {
+        setPrompts(result)
+      } else {
+        throw new Error("Unexpected prompt response structure")
       }
     } catch (err) {
-      console.error('fetchPrompts -> error:', err);
+      console.error("fetchPrompts -> error:", err)
       toast({
-        title: 'Error',
-        description: 'Failed to fetch prompts. Please try again.',
-        variant: 'destructive',
-      });
+        title: "Error",
+        description: "Failed to fetch prompts. Please try again.",
+        variant: "destructive"
+      })
     }
-  };
+  }
 
   /** Fetch the list of files from the backend */
   const fetchFiles = async () => {
     try {
-      const fileList = await listFiles();
-      setFiles(fileList);
+      const fileList = await listFiles()
+      setFiles(fileList)
     } catch (err) {
-      console.error('Error fetching files:', err);
-      toast({ title: 'Error', description: 'Failed to fetch files. Please try again.', variant: 'destructive' });
+      console.error("Error fetching files:", err)
+      toast({
+        title: "Error",
+        description: "Failed to fetch files. Please try again.",
+        variant: "destructive"
+      })
     }
-  };
+  }
 
-  /** Manually triggered on form submission (RHForm) */
+  /**
+   * Called when user clicks "Start Processing" and the form is valid.
+   */
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
-    console.log('onSubmit -> Called with data:', data);
-    setIsLoading(true);
-
+    setIsLoading(true)
     try {
-      let apiKey = '';
-      if (data.provider_choice === 'OpenAI') {
-        apiKey = openaiApiKey;
-      } else if (data.provider_choice === 'Anthropic') {
-        apiKey = anthropicApiKey;
-      } else if (data.provider_choice === 'Gemini') {
-        apiKey = geminiApiKey;
-      }
+      let apiKey = ""
+      if (data.provider_choice === "OpenAI") apiKey = openaiApiKey
+      else if (data.provider_choice === "Anthropic") apiKey = anthropicApiKey
+      else if (data.provider_choice === "Gemini") apiKey = geminiApiKey
 
-      const promptContent = await loadPrompt(data.prompt);
+      const promptContent = await loadPrompt(data.prompt)
       const settings: ProcessingSettings = {
         provider_choice: data.provider_choice,
         prompt: promptContent.content,
@@ -184,76 +206,103 @@ export default function ProcessingPage() {
         chunk_by: data.chunk_by,
         selected_model: data.selected_model,
         email: data.email,
-        openai_api_key: data.provider_choice === 'OpenAI' ? apiKey : '',
-        anthropic_api_key: data.provider_choice === 'Anthropic' ? apiKey : '',
-        gemini_api_key: data.provider_choice === 'Gemini' ? apiKey : '',
-        files: data.selected_files,  // Include selected files in settings
-      };
+        openai_api_key: data.provider_choice === "OpenAI" ? apiKey : "",
+        anthropic_api_key: data.provider_choice === "Anthropic" ? apiKey : "",
+        gemini_api_key: data.provider_choice === "Gemini" ? apiKey : "",
+        files: data.selected_files
+      }
 
-      console.log('onSubmit -> Final settings to be sent:', settings);
+      const response: StartProcessingResponse = await startProcessing(settings)
+      setTaskId(response.task_id)
+      setJobId(response.job_id)
 
-      const response: StartProcessingResponse = await startProcessing(settings);
-      console.log('onSubmit -> Received response:', response);
-
-      setTaskId(response.task_id);
-      setJobId(response.job_id); // Store job_id
-
-      // **Persist IDs in localStorage**
-      localStorage.setItem('taskId', response.task_id);
-      localStorage.setItem('jobId', response.job_id);
+      localStorage.setItem("taskId", response.task_id)
+      localStorage.setItem("jobId", response.job_id)
 
       toast({
-        title: 'Processing started',
-        description: `Task ID: ${response.task_id}, Job ID: ${response.job_id}`,
-      });
+        title: "Processing started",
+        description: `Task ID: ${response.task_id}, Job ID: ${response.job_id}`
+      })
     } catch (error: unknown) {
-      console.error('onSubmit -> Error starting processing:', error);
+      console.error("onSubmit -> Error starting processing:", error)
       toast({
-        title: 'Error',
-        description: (error as Error).message || 'Failed to start processing. Please try again.',
-        variant: 'destructive',
-      });
+        title: "Error",
+        description:
+          (error as Error).message || "Failed to start processing. Please try again.",
+        variant: "destructive"
+      })
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
-  /** Check Task Status Handler */
+  /**
+   * Checks the task status and job progress for the current Task/Job IDs.
+   */
   const checkTaskStatus = async (currentTaskId?: string, currentJobId?: string) => {
-    const id = currentTaskId || taskId;
-    const jId = currentJobId || jobId;
+    const id = currentTaskId || taskId
+    const jId = currentJobId || jobId
+    if (!id || !jId) return
 
-    if (!id || !jId) return;
-    console.log('checkTaskStatus -> Called, taskId:', id);
-
-    setIsLoading(true);
+    setIsLoading(true)
     try {
-      const status: TaskStatusResponse = await getTaskStatus(id);
-      console.log('checkTaskStatus -> Received status:', status);
-      setTaskStatus(status);
+      const status: TaskStatusResponse = await getTaskStatus(id)
+      setTaskStatus(status)
 
       if (status.job_id) {
-        setJobId(status.job_id); // Ensure job_id is stored
-        const progress: GetProcessingProgressResponse = await getProcessingProgress(status.job_id);
-        setJobProgress(progress);
+        setJobId(status.job_id)
+        const progress: GetProcessingProgressResponse = await getProcessingProgress(status.job_id)
+        setJobProgress(progress)
       }
 
-      // **Handle Completion: Clear IDs from localStorage if completed**
-      if (status.status === 'Completed') {
-        localStorage.removeItem('taskId');
-        localStorage.removeItem('jobId');
+      // Clear IDs from storage if completed
+      if (status.status === "Completed") {
+        localStorage.removeItem("taskId")
+        localStorage.removeItem("jobId")
       }
     } catch (error: unknown) {
-      console.error('checkTaskStatus -> Error:', error);
-      toast({
-        title: 'Error',
-        description: (error as Error).message || 'Failed to fetch task status. Please try again.',
-        variant: 'destructive',
-      });
+      const errMessage = (error as Error).message || ""
+      console.error("checkTaskStatus -> Error:", error)
+
+      // If we get "Task ID not found," assume the server has pruned it => "Completed"
+      if (errMessage.includes("Task ID not found")) {
+        toast({
+          title: "Task Completed",
+          description: "Server indicates the task no longer exists. Marking as completed."
+        })
+        localStorage.removeItem("taskId")
+        localStorage.removeItem("jobId")
+        setTaskId(null)
+        setJobId(null)
+        setTaskStatus(null)
+        setJobProgress(null)
+      } else {
+        toast({
+          title: "Error",
+          description: errMessage || "Failed to fetch task status. Please try again.",
+          variant: "destructive"
+        })
+      }
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
+
+  // Determine file selection states:
+  const selectedFiles = form.watch("selected_files")
+  const allFilesSelected = selectedFiles.length === files.length && files.length > 0
+  const someFilesSelected = selectedFiles.length > 0 && selectedFiles.length < files.length
+
+  // For the single "Select All" checkbox, we pass a union type to "checked":
+  //  - true if all are selected
+  //  - "indeterminate" if only some
+  //  - false if none
+  let selectAllValue: boolean | "indeterminate" = false
+  if (allFilesSelected) {
+    selectAllValue = true
+  } else if (someFilesSelected) {
+    selectAllValue = "indeterminate"
+  }
 
   return (
     <div className="container mx-auto py-10 space-y-8">
@@ -268,9 +317,10 @@ export default function ProcessingPage() {
         </CardHeader>
         <CardContent className="p-6">
           <Form {...form}>
-            {/* Use an explicit onClick instead of <form onSubmit=...> */}
             <div className="space-y-6">
+              {/* Provider Choice + Model */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* AI Provider */}
                 <FormField
                   control={form.control}
                   name="provider_choice"
@@ -296,7 +346,7 @@ export default function ProcessingPage() {
                     </FormItem>
                   )}
                 />
-
+                {/* Model */}
                 <FormField
                   control={form.control}
                   name="selected_model"
@@ -326,7 +376,7 @@ export default function ProcessingPage() {
                 />
               </div>
 
-              {/* Prompt Selection */}
+              {/* Prompt */}
               <FormField
                 control={form.control}
                 name="prompt"
@@ -355,7 +405,7 @@ export default function ProcessingPage() {
                 )}
               />
 
-              {/* Multi-select Dropdown for File Selection */}
+              {/* File Selection: Single "Select All" toggle + file list */}
               <FormField
                 control={form.control}
                 name="selected_files"
@@ -366,30 +416,60 @@ export default function ProcessingPage() {
                       Select Files
                     </FormLabel>
                     <FormControl>
-                      <div className="space-y-2 max-h-60 overflow-y-auto border rounded p-2">
+                      <div className="border rounded p-2 max-h-60 overflow-y-auto">
+                        {/* One checkbox to select/deselect all */}
+                        <div className="flex items-center mb-4">
+                          <Checkbox
+                            // For Radix-based Checkbox from shadcn/ui:
+                            // - boolean | "indeterminate" is allowed for "checked"
+                            checked={selectAllValue}
+                            onCheckedChange={(checked) => {
+                              if (checked === true) {
+                                // If user toggles to checked, select all
+                                field.onChange(files)
+                              } else {
+                                // If user toggles to unchecked or "indeterminate" => deselect all
+                                field.onChange([])
+                              }
+                            }}
+                            id="select-all-toggle"
+                          />
+                          <label
+                            htmlFor="select-all-toggle"
+                            className="text-sm font-medium leading-none ml-2"
+                          >
+                            Select All
+                          </label>
+                        </div>
+
+                        {/* Individual file checkboxes */}
                         {files.length === 0 ? (
                           <div className="text-sm text-muted-foreground">Loading files...</div>
                         ) : (
-                          files.map((file) => (
-                            <div key={file} className="flex items-center space-x-2">
-                              <Checkbox
-                                id={file}
-                                checked={field.value?.includes(file)}
-                                onCheckedChange={() => {
-                                  const updatedValue = field.value?.includes(file)
-                                    ? field.value.filter((f: string) => f !== file)
-                                    : [...(field.value || []), file]
-                                  field.onChange(updatedValue)
-                                }}
-                              />
-                              <label
-                                htmlFor={file}
-                                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                              >
-                                {file}
-                              </label>
-                            </div>
-                          ))
+                          files.map((file) => {
+                            const isChecked = field.value?.includes(file)
+                            return (
+                              <div key={file} className="flex items-center space-x-2 mb-2">
+                                <Checkbox
+                                  id={file}
+                                  // For each item, boolean for checked
+                                  checked={!!isChecked}
+                                  onCheckedChange={() => {
+                                    const updatedFiles = isChecked
+                                      ? field.value.filter((f) => f !== file)
+                                      : [...field.value, file]
+                                    field.onChange(updatedFiles)
+                                  }}
+                                />
+                                <label
+                                  htmlFor={file}
+                                  className="text-sm font-medium leading-none"
+                                >
+                                  {file}
+                                </label>
+                              </div>
+                            )
+                          })
                         )}
                       </div>
                     </FormControl>
@@ -398,6 +478,7 @@ export default function ProcessingPage() {
                 )}
               />
 
+              {/* Chunk Size + Chunk By */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <FormField
                   control={form.control}
@@ -417,7 +498,6 @@ export default function ProcessingPage() {
                     </FormItem>
                   )}
                 />
-
                 <FormField
                   control={form.control}
                   name="chunk_by"
@@ -442,6 +522,7 @@ export default function ProcessingPage() {
                 />
               </div>
 
+              {/* Email */}
               <FormField
                 control={form.control}
                 name="email"
@@ -460,7 +541,7 @@ export default function ProcessingPage() {
               />
 
               {/* Conditional API Key Fields */}
-              {providerChoice === 'OpenAI' && (
+              {providerChoice === "OpenAI" && (
                 <FormField
                   control={form.control}
                   name="openai_api_key"
@@ -471,12 +552,12 @@ export default function ProcessingPage() {
                         <div className="relative">
                           <Input
                             {...field}
-                            type={showApiKey ? 'text' : 'text'} // Changed to text for security
+                            type={showApiKey ? "text" : "text"} // Simplified to text
                             placeholder="Enter OpenAI API Key"
                             value={openaiApiKey}
                             onChange={(e) => {
-                              setOpenaiApiKey(e.target.value);
-                              field.onChange(e.target.value);
+                              setOpenaiApiKey(e.target.value)
+                              field.onChange(e.target.value)
                             }}
                             className="pr-10"
                           />
@@ -496,7 +577,7 @@ export default function ProcessingPage() {
                 />
               )}
 
-              {providerChoice === 'Anthropic' && (
+              {providerChoice === "Anthropic" && (
                 <FormField
                   control={form.control}
                   name="anthropic_api_key"
@@ -507,12 +588,12 @@ export default function ProcessingPage() {
                         <div className="relative">
                           <Input
                             {...field}
-                            type={showApiKey ? 'text' : 'text'} // Changed to text for security
+                            type={showApiKey ? "text" : "text"}
                             placeholder="Enter Anthropic API Key"
                             value={anthropicApiKey}
                             onChange={(e) => {
-                              setAnthropicApiKey(e.target.value);
-                              field.onChange(e.target.value);
+                              setAnthropicApiKey(e.target.value)
+                              field.onChange(e.target.value)
                             }}
                             className="pr-10"
                           />
@@ -532,7 +613,7 @@ export default function ProcessingPage() {
                 />
               )}
 
-              {providerChoice === 'Gemini' && (
+              {providerChoice === "Gemini" && (
                 <FormField
                   control={form.control}
                   name="gemini_api_key"
@@ -543,12 +624,12 @@ export default function ProcessingPage() {
                         <div className="relative">
                           <Input
                             {...field}
-                            type={showApiKey ? 'text' : 'text'} // Changed to text for security
+                            type={showApiKey ? "text" : "text"}
                             placeholder="Enter Gemini API Key"
                             value={geminiApiKey}
                             onChange={(e) => {
-                              setGeminiApiKey(e.target.value);
-                              field.onChange(e.target.value);
+                              setGeminiApiKey(e.target.value)
+                              field.onChange(e.target.value)
                             }}
                             className="pr-10"
                           />
@@ -568,29 +649,26 @@ export default function ProcessingPage() {
                 />
               )}
 
-              {/* Instead of type="submit", explicitly handle clicks for debugging */}
+              {/* Start Processing Button */}
               <Button
                 onClick={() => {
-                  console.log("Start Processing button clicked");
                   form.handleSubmit(
-                    (data) => {
-                      // Valid data path
-                      console.log("Valid data callback called with:", data);
-                      onSubmit(data);
-                    },
+                    (data) => onSubmit(data),
                     (errors) => {
-                      // Invalid data path
-                      console.log("Invalid data callback called with errors:", errors);
+                      console.log("Invalid data callback called with errors:", errors)
                     }
-                  )();
+                  )()
                 }}
                 disabled={isLoading}
                 className="w-full"
               >
-                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+                {isLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Play className="mr-2 h-4 w-4" />
+                )}
                 Start Processing
               </Button>
-
             </div>
           </Form>
         </CardContent>
@@ -631,15 +709,23 @@ export default function ProcessingPage() {
                     <Card key={fileStatus.filename} className="p-4">
                       <div className="flex items-center justify-between mb-2">
                         <span className="font-medium">{fileStatus.filename}</span>
-                        <span className={`text-sm font-semibold ${fileStatus.status === 'Completed' ? 'text-green-600' : 'text-yellow-600'}`}>
+                        <span
+                          className={`text-sm font-semibold ${
+                            fileStatus.status === "Completed"
+                              ? "text-green-600"
+                              : "text-yellow-600"
+                          }`}
+                        >
                           {fileStatus.status}
                         </span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
                         <div
-                          className={`bg-${fileStatus.status === 'Completed' ? 'green' : 'yellow'}-500 h-2.5 rounded-full`}
+                          className={`bg-${
+                            fileStatus.status === "Completed" ? "green" : "yellow"
+                          }-500 h-2.5 rounded-full`}
                           style={{ width: `${fileStatus.progress_percentage}%` }}
-                        ></div>
+                        />
                       </div>
                       <p className="text-sm text-gray-600">
                         {fileStatus.processed_chunks} / {fileStatus.total_chunks} chunks processed
@@ -659,10 +745,10 @@ export default function ProcessingPage() {
               )}
               Refresh Status
             </Button>
-            <Button 
-              onClick={() => window.location.href = "/results"} 
+            <Button
+              onClick={() => (window.location.href = "/results")}
               disabled={jobProgress?.job_status !== "Completed"}
-              className='ml-4'
+              className="ml-4"
             >
               Next
             </Button>
@@ -670,5 +756,5 @@ export default function ProcessingPage() {
         </Card>
       )}
     </div>
-  );
+  )
 }

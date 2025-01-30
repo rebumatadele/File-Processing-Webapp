@@ -10,7 +10,7 @@ import handleError from '../utils/handleError'
  */
 export const getAnthropicUsage = async (): Promise<UsageResponse> => {
   try {
-    const response = await axiosInstance.get<UsageResponse>('/usage/anthropic')
+    const response = await axiosInstance.get<UsageResponse>('/usage')
     return response.data
   } catch (error) {
     return handleError(error)
