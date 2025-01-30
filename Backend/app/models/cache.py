@@ -13,5 +13,5 @@ class CachedResult(Base):
     provider_choice = Column(String, nullable=False)
     model_choice = Column(String, nullable=True)
     chunk = Column(Text, nullable=False)
-    response = Column(JSON, nullable=False)
+    response = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
