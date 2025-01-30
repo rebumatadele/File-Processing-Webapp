@@ -376,8 +376,8 @@ async def process_single_file(
         merged_text = "\n".join(extracted_texts)
 
         # Save the processed result
-        save_processed_result(db, file_status.filename, merged_text, uploaded_file_id)  # Pass uploaded_file_id
-
+        reuse_key_b64 = uploaded_file.encryption_key  # or generate a new key
+        save_processed_result(db, file_status.filename, merged_text, uploaded_file_id, reuse_key_b64)
         file_status.status = "completed"
         file_status.progress_percentage = 100.0
         file_status.updated_at = datetime.utcnow()
