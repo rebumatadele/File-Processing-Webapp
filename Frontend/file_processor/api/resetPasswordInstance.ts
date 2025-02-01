@@ -3,7 +3,7 @@
 import axios, { AxiosInstance } from 'axios';
 
 const resetPasswordInstance: AxiosInstance = axios.create({
-  baseURL: 'https://file-processing-webapp.onrender.com',
+  baseURL: process.env.BACKEND_URL || 'https://file-processing-webapp.onrender.com',
   headers: {
     'Content-Type': 'application/json',
   },
