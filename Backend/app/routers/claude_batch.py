@@ -61,7 +61,7 @@ async def start_batch_processing(
         if not all_chunks:
             raise HTTPException(status_code=400, detail="No valid chunks to process.")
 
-        callback_url = "https://file-processing-webapp.onrender.com/processing/claude/batch_callback"
+        callback_url = "https://fileprocessingwebapp.onrender.com/processing/claude/batch_callback"
         payload = {"chunks": all_chunks, "callback_url": callback_url}
 
         async with httpx.AsyncClient(timeout=30) as client:
