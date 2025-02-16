@@ -78,19 +78,6 @@ def read_root():
 # Define a custom OAuth2 schema for Swagger UI
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-def keep_alive():
-    while True:
-        try:
-            # Ping this application
-            requests.get("https://file-processing-webapp.onrender.com/")
-            # Ping the other backend
-            requests.get("https://claude-integration-service-1.onrender.com/")
-            print("Pinging successful")
-        except Exception as e:
-            print(f"Failed to ping: {e}")
-        # Wait 5 minutes (300 seconds)
-        threading.Event().wait(300)
-
 @app.on_event("startup")
 async def startup_event():
     print("Application has started and is ready to accept requests.")
@@ -105,6 +92,3 @@ async def startup_event():
             "bearerFormat": "JWT",  # Indicate you're using a JWT token
         }
         app.openapi_schema = openapi_schema
-
-    # Start the keep-alive thread
-    threading.Thread(target=keep_alive, daemon=True).start()
